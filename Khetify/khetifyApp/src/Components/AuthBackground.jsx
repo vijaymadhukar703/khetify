@@ -23,4 +23,6 @@ const AuthBackground = ({ children }) => (
   </div>
 );
 
+
+
 export default AuthBackground;
