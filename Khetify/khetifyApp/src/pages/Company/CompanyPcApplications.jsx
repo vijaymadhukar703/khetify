@@ -1,0 +1,430 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Swal from 'sweetalert2';
+import config from '../../../config/config';
+import {
+  getCompanyPcApplications, getCompanyPcApplication, reviewPcApplication, requestPcDocs,
+  rejectPcApplication, approvePcApplication, issuePc,
+  revokeCertificate, reinstateCertificate,
+  verifySellerDocument, rejectSellerDocument, attachPcAgreement,
+  getCompanyPcForm, saveCompanyPcForm,
+} from '../../lib/imsApi';
+import BackButton from '../../Components/BackButton';
+
+const FIELD_TYPES = ['text', 'number', 'date', 'select', 'file'];
+// Profile autofill targets a seller can map a field to (so it pre-fills).
+const PROFILE_FIELDS = [
+  ['', 'No autofill (company-specific)'],
+  ['identity.businessName', 'Profile · Business name'],
+  ['identity.contactPerson', 'Profile · Contact person'],
+  ['identity.email', 'Profile · Email'],
+  ['identity.phone', 'Profile · Phone'],
+  ['identity.address', 'Profile · Address'],
+  ['compliance.gstin', 'Profile · GSTIN'],
+  ['compliance.pan', 'Profile · PAN'],
+  ['compliance.gstCertificateUrl', 'Profile · GST certificate (file)'],
+  ['compliance.panFileUrl', 'Profile · PAN file (file)'],
+];
+
+const toast = (icon, title) => Swal.fire({ icon, title, toast: true, position: 'top-end', timer: 2400, showConfirmButton: false });
+const apiErr = (e) => toast('error', e?.response?.data?.message || e.message || 'Something went wrong');
+const FILE_ORIGIN = config.BASE_URL.replace(/\/api\/?$/, '');
+const absUrl = (u) => (!u ? null : u.startsWith('http') ? u : `${FILE_ORIGIN}${u}`);
+const openPdf = (u) => { const a = absUrl(u); if (a) window.open(a, '_blank', 'noopener'); };
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+const sellerName = (s) => s?.sellerInfo?.businessName || s?.contact?.ownerName || '—';
+
+const STATUS_STYLE = {
+  applied: 'bg-amber-50 text-amber-700', under_review: 'bg-blue-50 text-blue-700', need_more_docs: 'bg-orange-50 text-orange-700',
+  approved: 'bg-blue-50 text-blue-700', agreement_pending: 'bg-indigo-50 text-indigo-700', agreement_signed: 'bg-indigo-50 text-indigo-700',
+  pc_issued: 'bg-green-50 text-green-700',
+  active: 'bg-green-50 text-green-700', rejected: 'bg-red-50 text-red-700', revoked: 'bg-red-50 text-red-700', expired: 'bg-stone-100 text-stone-500',
+};
+// Friendly badge labels (statuses the lifecycle actually surfaces).
+const STATUS_LABEL = {
+  applied: 'Applied', under_review: 'Under Review', need_more_docs: 'Need Docs',
+  agreement_pending: 'Awaiting Signature', agreement_signed: 'Ready to Issue',
+  active: 'Active', rejected: 'Rejected',
+};
+const statusLabel = (s) => STATUS_LABEL[s] || (s || '').replace(/_/g, ' ');
+
+// One lightweight filter (NOT nine tabs). "Pending action" = anything the
+// company still needs to act on; the rest are terminal-ish buckets.
+const FILTERS = [['all', 'All'], ['pending', 'Pending action'], ['active', 'Active'], ['rejected', 'Rejected']];
+const PENDING_ACTION = ['applied', 'under_review', 'need_more_docs', 'agreement_pending', 'agreement_signed'];
+const matchesFilter = (status, filter) => (
+  filter === 'all' ? true
+    : filter === 'pending' ? PENDING_ACTION.includes(status)
+    : filter === 'active' ? ['active', 'pc_issued'].includes(status)
+    : filter === 'rejected' ? status === 'rejected'
+    : true
+);
+
+const CompanyPcApplications = () => {
+  const [filter, setFilter] = useState('all');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = useCallback(() => {
+    getCompanyPcApplications().then((r) => setRows(r?.data || [])).catch(apiErr).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const visible = rows.filter((a) => matchesFilter(a.status, filter));
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 font-sora">
+      <BackButton />
+      <div className="flex items-end justify-between gap-3 mb-5 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900 mb-1">PC Applications</h1>
+          <p className="text-stone-500">Review reseller authorizations and issue Principal Certificates. Open a row to act.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowForm((v) => !v)} className="h-10 px-3.5 rounded-lg border border-stone-300 text-sm font-bold text-stone-600 hover:bg-stone-50">
+            <span className="material-symbols-outlined text-base align-middle mr-1">tune</span>{showForm ? 'Hide form builder' : 'Application form'}
+          </button>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white outline-none focus:border-[#EA2831]"
+          >
+            {FILTERS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {showForm && <FormBuilderCard />}
+
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+        {loading ? <p className="px-5 py-10 text-center text-stone-400">Loading…</p>
+          : visible.length === 0 ? <p className="px-5 py-10 text-center text-stone-400">No applications.</p>
+          : (
+            <ul className="divide-y divide-stone-100">
+              {visible.map((a) => (
+                <li key={a._id}>
+                  <button
+                    onClick={() => setDetail(a._id)}
+                    className="w-full px-5 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-stone-50/70 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-stone-800 truncate">{sellerName(a.sellerId)}</p>
+                      <p className="text-[11px] text-stone-400">{(a.productCategories || []).join(', ') || '—'} · {fmtDate(a.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${STATUS_STYLE[a.status] || 'bg-stone-100 text-stone-500'}`}>{statusLabel(a.status)}</span>
+                      <span className="text-[11px] font-bold text-[#EA2831] hidden sm:inline">Open</span>
+                      <span className="material-symbols-outlined text-stone-300 text-lg">chevron_right</span>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+
+      {detail && <ApplicationDetailModal id={detail} onClose={() => setDetail(null)} onChange={load} />}
+    </div>
+  );
+};
+
+// Company-configurable PC application form builder — add / edit / remove /
+// reorder fields, mark required, set the profile autofill mapping, and save.
+const FormBuilderCard = () => {
+  const [fields, setFields] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { getCompanyPcForm().then((r) => setFields(r?.data?.fields || [])).catch(apiErr); }, []);
+
+  const update = (i, patch) => setFields((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  const remove = (i) => setFields((fs) => fs.filter((_, j) => j !== i));
+  const move = (i, dir) => setFields((fs) => {
+    const j = i + dir;
+    if (j < 0 || j >= fs.length) return fs;
+    const next = [...fs]; [next[i], next[j]] = [next[j], next[i]]; return next;
+  });
+  const add = () => setFields((fs) => [...fs, { key: `field_${fs.length + 1}`, label: '', type: 'text', required: false, profileField: null }]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const payload = fields.map((f) => ({
+        key: f.key, label: f.label, type: f.type, required: !!f.required,
+        profileField: f.profileField || null,
+        options: f.type === 'select' ? String(f.optionsText ?? (f.options || []).join(', ')).split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+      }));
+      const r = await saveCompanyPcForm(payload);
+      setFields(r?.data?.fields || payload);
+      toast('success', 'Application form saved');
+    } catch (e) { apiErr(e); } finally { setBusy(false); }
+  };
+
+  const cell = 'h-9 px-2 rounded-lg border border-stone-300 text-sm bg-white outline-none focus:border-[#EA2831]';
+  return (
+    <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm mb-5">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-bold text-stone-900">Application form</h2>
+        <span className="text-[11px] text-stone-400">Sellers fill this when applying for your PC</span>
+      </div>
+      <p className="text-xs text-stone-500 mb-4">Map a field to a profile value to auto-fill it from the seller&apos;s profile (so they never re-type PAN/GSTIN/etc.).</p>
+      {fields === null ? <p className="text-sm text-stone-400">Loading…</p> : (
+        <div className="space-y-2">
+          {fields.map((f, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 border border-stone-100 rounded-lg p-2">
+              <input className={`${cell} w-40`} value={f.label} placeholder="Label" onChange={(e) => update(i, { label: e.target.value })} />
+              <input className={`${cell} w-32`} value={f.key} placeholder="key" onChange={(e) => update(i, { key: e.target.value })} />
+              <select className={cell} value={f.type} onChange={(e) => update(i, { type: e.target.value })}>
+                {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select className={`${cell} w-52`} value={f.profileField || ''} onChange={(e) => update(i, { profileField: e.target.value || null })}>
+                {PROFILE_FIELDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              {f.type === 'select' && (
+                <input className={`${cell} w-44`} value={f.optionsText ?? (f.options || []).join(', ')} placeholder="Options (comma-sep)" onChange={(e) => update(i, { optionsText: e.target.value })} />
+              )}
+              <label className="flex items-center gap-1 text-xs font-bold text-stone-600">
+                <input type="checkbox" checked={!!f.required} onChange={(e) => update(i, { required: e.target.checked })} /> Required
+              </label>
+              <div className="ml-auto flex items-center gap-1">
+                <button onClick={() => move(i, -1)} className="text-stone-400 hover:text-stone-700" title="Move up"><span className="material-symbols-outlined text-base">arrow_upward</span></button>
+                <button onClick={() => move(i, 1)} className="text-stone-400 hover:text-stone-700" title="Move down"><span className="material-symbols-outlined text-base">arrow_downward</span></button>
+                <button onClick={() => remove(i)} className="text-red-400 hover:text-red-600" title="Remove"><span className="material-symbols-outlined text-base">delete</span></button>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <button onClick={add} className="text-xs font-bold px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50">+ Add field</button>
+            <button onClick={save} disabled={busy} className="text-xs font-bold px-4 py-1.5 rounded-lg bg-[#EA2831] text-white hover:bg-red-600 disabled:opacity-60">{busy ? 'Saving…' : 'Save form'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ApplicationDetailModal = ({ id, onClose, onChange }) => {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => { getCompanyPcApplication(id).then((r) => setD(r?.data || null)).catch(apiErr); }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (fn, after) => { setBusy(true); try { await fn(); toast('success', after || 'Done'); load(); onChange(); } catch (e) { apiErr(e); } finally { setBusy(false); } };
+
+  const requestDocs = async () => {
+    const { value, isConfirmed } = await Swal.fire({ title: 'Request more documents', input: 'text', inputLabel: 'Which documents? (comma-separated)', showCancelButton: true, confirmButtonColor: '#EA2831', confirmButtonText: 'Request' });
+    if (!isConfirmed) return;
+    run(() => requestPcDocs(id, { docs: (value || '').split(',').map((s) => s.trim()).filter(Boolean), note: value }), 'Requested');
+  };
+  const reject = async () => {
+    const { value, isConfirmed } = await Swal.fire({ title: 'Reject application', input: 'text', inputLabel: 'Reason', showCancelButton: true, confirmButtonColor: '#EA2831', confirmButtonText: 'Reject' });
+    if (isConfirmed) run(() => rejectPcApplication(id, value || ''), 'Rejected');
+  };
+  const [showIssue, setShowIssue] = useState(false);
+  const confirmIssue = ({ validMonths }) => {
+    setShowIssue(false);
+    run(() => issuePc(id, { validMonths }), 'Certificate issued');
+  };
+  const attachRef = useRef(null);
+  const attach = async () => {
+    const f = attachRef.current?.files?.[0];
+    if (!f) { toast('error', 'Choose an agreement file (PDF)'); return; }
+    const fd = new FormData(); fd.append('file', f);
+    run(() => attachPcAgreement(id, fd), 'Agreement sent to seller');
+  };
+  // Certificate actions (formerly the Certificates tab) — now in the detail.
+  const revokeCert = async (certId) => {
+    const r = await Swal.fire({ title: 'Revoke this certificate?', input: 'text', inputLabel: 'Reason (optional)', icon: 'warning', showCancelButton: true, confirmButtonColor: '#EA2831', confirmButtonText: 'Revoke' });
+    if (r.isConfirmed) run(() => revokeCertificate(certId, r.value), 'Certificate revoked');
+  };
+  const reinstateCert = async (certId) => {
+    const r = await Swal.fire({ title: 'Reinstate this certificate?', text: 'It becomes Active again (if still within its validity).', icon: 'question', showCancelButton: true, confirmButtonColor: '#EA2831', confirmButtonText: 'Reinstate' });
+    if (r.isConfirmed) run(() => reinstateCertificate(certId), 'Certificate reinstated');
+  };
+
+  const app = d?.application;
+  const status = app?.status;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 font-sora" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {!d ? <p className="p-8 text-center text-stone-400">Loading…</p> : (
+          <>
+            <div className="px-5 py-4 border-b border-stone-200">
+              <h3 className="font-bold text-stone-900">{sellerName(app.sellerId)}</h3>
+              <p className="text-xs text-stone-500">{(app.productCategories || []).join(', ') || '—'} · <span className="capitalize">{status?.replace(/_/g, ' ')}</span></p>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Business</p>
+                <p className="text-sm text-stone-700">{app.businessSnapshot?.businessName || '—'}</p>
+                <p className="text-[11px] text-stone-400">GSTIN {app.businessSnapshot?.gstin || '—'} · PAN {app.businessSnapshot?.pan || '—'}</p>
+                <p className="text-[11px] text-stone-400">{app.businessSnapshot?.address || '—'}</p>
+              </div>
+              {app.formAnswers && Object.keys(app.formAnswers).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Application form</p>
+                  <ul className="space-y-1">
+                    {(app.formSnapshot?.length ? app.formSnapshot.filter((f) => f.type !== 'file') : Object.keys(app.formAnswers).map((k) => ({ key: k, label: k }))).map((f) => (
+                      <li key={f.key} className="text-[11px] text-stone-500 flex gap-2">
+                        <span className="font-bold text-stone-700">{f.label}:</span>
+                        <span>{String(app.formAnswers[f.key] ?? '—') || '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Documents</p>
+                {(d.documents || []).length === 0 ? <p className="text-sm text-stone-400">No documents attached.</p> : (
+                  <ul className="space-y-1.5">
+                    {d.documents.map((doc) => (
+                      <li key={doc._id} className="flex items-center justify-between gap-2 border border-stone-100 rounded-lg px-3 py-2">
+                        <button onClick={() => openPdf(doc.url)} className="text-xs font-bold text-stone-700 hover:text-[#EA2831] truncate text-left">{doc.label || doc.fileName} <span className="text-stone-400">({doc.docType})</span></button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 capitalize ${doc.status === 'verified' ? 'bg-green-50 text-green-700' : doc.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-stone-100 text-stone-500'}`}>{doc.status || 'pending'}</span>
+                          {doc.status !== 'verified' && <button disabled={busy} onClick={() => run(() => verifySellerDocument(doc._id), 'Document verified')} className="text-[11px] font-bold text-green-600 hover:underline">Verify</button>}
+                          {doc.status !== 'rejected' && <button disabled={busy} onClick={() => run(() => rejectSellerDocument(doc._id), 'Document rejected')} className="text-[11px] font-bold text-red-500 hover:underline">Reject</button>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {(app.timeline || []).length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Timeline</p>
+                  <ul className="space-y-1">
+                    {[...app.timeline].reverse().map((t, i) => (
+                      <li key={i} className="text-[11px] text-stone-500 flex gap-2">
+                        <span className="font-bold text-stone-700 capitalize">{t.status?.replace(/_/g, ' ')}</span>
+                        <span>· {t.byType}</span>
+                        <span className="text-stone-400">· {fmtDate(t.at)}</span>
+                        {t.note && <span className="text-stone-400">· {t.note}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {d.agreement && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Agreement</p>
+
+                  {/* Awaiting signature: company attaches the contract to send to the seller. */}
+                  {status === 'agreement_pending' && (
+                    <div className="border border-stone-200 rounded-xl p-3 space-y-2">
+                      {d.agreement.agreementFileUrl ? (
+                        <>
+                          <p className="text-sm font-bold text-indigo-700">Agreement sent to seller for signature</p>
+                          <button onClick={() => openPdf(d.agreement.agreementFileUrl)} className="text-xs font-bold text-[#EA2831] hover:underline">View attached agreement</button>
+                        </>
+                      ) : (
+                        <p className="text-sm text-stone-600">Awaiting seller signature. Attach your own agreement to send, or the generated draft will be signed.</p>
+                      )}
+                      {d.agreement.unsignedPdfUrl && <button onClick={() => openPdf(d.agreement.unsignedPdfUrl)} className="block text-[11px] text-stone-500 hover:underline">View generated draft</button>}
+                      <div className="flex items-center gap-2 pt-1">
+                        <input ref={attachRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-xs" />
+                        <button disabled={busy} onClick={attach} className="text-xs font-bold px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">{d.agreement.agreementFileUrl ? 'Replace & resend' : 'Attach & send'}</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Signed: show the signed agreement + the prominent next step. */}
+                  {status === 'agreement_signed' && (
+                    <div className="border border-green-200 bg-green-50/50 rounded-xl p-3 space-y-2">
+                      <p className="text-sm font-bold text-green-800">✓ Seller signed the agreement</p>
+                      <button onClick={() => openPdf(d.agreement.signedPdfUrl || d.agreement.agreementFileUrl || d.agreement.unsignedPdfUrl)} className="text-xs font-bold text-[#EA2831] hover:underline">View signed agreement</button>
+                      <button disabled={busy} onClick={() => setShowIssue(true)} className="block w-full mt-1 rounded-lg bg-[#EA2831] py-2 text-sm font-bold text-white hover:bg-red-600">Issue Principal Certificate →</button>
+                    </div>
+                  )}
+
+                  {/* Otherwise just a link to the latest agreement document. */}
+                  {!['agreement_pending', 'agreement_signed'].includes(status) && (
+                    <button onClick={() => openPdf(d.agreement.signedPdfUrl || d.agreement.agreementFileUrl || d.agreement.unsignedPdfUrl)} className="text-sm font-bold text-[#EA2831] hover:underline">Open agreement ({d.agreement.status})</button>
+                  )}
+                </div>
+              )}
+              {d.certificate && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">Certificate</p>
+                  <div className="border border-stone-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <button onClick={() => openPdf(d.certificate.pdfUrl)} className="text-sm font-bold text-[#EA2831] hover:underline font-mono">{d.certificate.pcNumber}</button>
+                      <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${STATUS_STYLE[d.certificate.status] || 'bg-stone-100 text-stone-500'}`}>{statusLabel(d.certificate.status)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {d.certificate.status === 'active' && <button onClick={() => openPdf(d.certificate.pdfUrl)} className="text-xs font-bold px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">Download</button>}
+                      {d.certificate.status === 'active' && <button disabled={busy} onClick={() => revokeCert(d.certificate._id)} className="text-xs font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Revoke</button>}
+                      {d.certificate.status === 'revoked' && <button disabled={busy} onClick={() => reinstateCert(d.certificate._id)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#EA2831] text-white hover:bg-red-600">Reinstate</button>}
+                      {d.certificate.status === 'revoked' && d.certificate.revokedReason && <span className="text-[11px] text-red-500 self-center">Revoked: {d.certificate.revokedReason}</span>}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-stone-200 flex flex-wrap justify-end gap-2">
+              {['applied', 'under_review', 'need_more_docs'].includes(status) && <button disabled={busy} onClick={() => run(() => reviewPcApplication(id), 'Marked under review')} className="text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-50">Mark under review</button>}
+              {['applied', 'under_review'].includes(status) && <button disabled={busy} onClick={requestDocs} className="text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-50">Request docs</button>}
+              {['applied', 'under_review', 'need_more_docs'].includes(status) && <button disabled={busy} onClick={reject} className="text-xs font-bold px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Reject</button>}
+              {['applied', 'under_review', 'need_more_docs'].includes(status) && <button disabled={busy} onClick={() => run(() => approvePcApplication(id), 'Approved — agreement generated')} className="text-xs font-bold px-3 py-2 rounded-lg bg-[#EA2831] text-white hover:bg-red-600">Approve</button>}
+              <button onClick={onClose} className="text-xs font-bold px-3 py-2 rounded-lg text-stone-500">Close</button>
+            </div>
+          </>
+        )}
+      </div>
+      {showIssue && <IssuePcModal busy={busy} onClose={() => setShowIssue(false)} onConfirm={confirmIssue} />}
+    </div>
+  );
+};
+
+// Issue PC dialog — clearly labelled validity (months) with presets + a live
+// expiry preview, plus the regulated toggle.
+const VALIDITY_PRESETS = [12, 24, 36, 60];
+const addMonths = (months) => { const d = new Date(); d.setMonth(d.getMonth() + Number(months || 0)); return d; };
+
+const IssuePcModal = ({ busy, onClose, onConfirm }) => {
+  const [months, setMonths] = useState(36);
+  const n = Number(months);
+  const valid = Number.isInteger(n) && n >= 1 && n <= 120;
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4 font-sora" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-stone-900 mb-1">Issue Principal Certificate</h3>
+        <p className="text-xs text-stone-500 mb-4">Set how long the certificate stays valid from today.</p>
+
+        <label className="block text-xs font-bold text-stone-600 mb-1">Validity (months)</label>
+        <input
+          type="number" min={1} max={120} step={1}
+          value={months}
+          onChange={(e) => setMonths(e.target.value.replace(/[^0-9]/g, ''))}
+          className="w-full h-11 px-3 rounded-lg border border-stone-300 text-sm outline-none focus:border-[#EA2831] focus:ring-2 focus:ring-[#EA2831]/10"
+        />
+        <p className="text-[11px] text-stone-400 mt-1">How long the certificate stays valid from the issue date (1–120 months).</p>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {VALIDITY_PRESETS.map((p) => (
+            <button key={p} type="button" onClick={() => setMonths(p)}
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${n === p ? 'border-[#EA2831] bg-red-50 text-[#EA2831]' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}>
+              {p} mo
+            </button>
+          ))}
+        </div>
+        <p className="text-sm font-bold text-stone-700 mt-3">{valid ? `Valid until ${fmtDate(addMonths(n))}` : <span className="text-red-500">Enter 1–120 months</span>}</p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="text-xs font-bold px-4 py-2 rounded-lg text-stone-500 hover:bg-stone-50">Cancel</button>
+          <button
+            disabled={!valid || busy}
+            onClick={() => onConfirm({ validMonths: n })}
+            className="text-xs font-bold px-4 py-2 rounded-lg bg-[#EA2831] text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Issue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CompanyPcApplications;

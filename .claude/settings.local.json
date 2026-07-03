@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx jest *)",
+      "Bash(npx eslint *)",
+      "Bash(echo \"ESLINT_EXIT=$?\")"
+    ]
+  }
+}

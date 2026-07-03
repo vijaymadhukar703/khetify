@@ -1,0 +1,49 @@
+{
+  "name": "khetify-backend",
+  "version": "1.0.0",
+  "main": "Server.js",
+  "scripts": {
+    "start": "node Server.js",
+    "dev": "nodemon Server.js",
+    "seed:ims": "node scripts/seedIms.js",
+    "ensure-indexes": "node scripts/ensureIndexes.js",
+    "migrate": "node scripts/migrations/001-backfill-customer.js && node scripts/migrations/002-user-roles.js && node scripts/migrations/003-default-bins.js",
+    "test": "jest --runInBand --forceExit",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.700.0",
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/credential-providers": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.1070.0",
+    "axios": "^1.7.9",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.1.5",
+    "multer": "^2.0.2",
+    "newrelic": "^13.12.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1",
+    "pino": "^9.14.0",
+    "pino-http": "^10.5.0",
+    "socket.io": "^4.7.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.2",
+    "nodemon": "^3.1.11",
+    "pino-pretty": "^11.3.0",
+    "supertest": "^7.0.0"
+  }
+}

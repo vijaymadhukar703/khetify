@@ -1,0 +1,42 @@
+# Local dev stack. MongoDB runs as a SINGLE-NODE REPLICA SET so that
+# multi-document transactions (withTransaction) work exactly like production.
+services:
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initialize the replica set once, then report healthy.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try{rs.status().ok}catch(e){rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})}"]
+      interval: 10s
+      start_period: 20s
+      retries: 10
+
+  backend:
+    build: ./khetify-backend
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb://mongo:27017/khetify?replicaSet=rs0
+      - MONGO_TRANSACTIONS=on
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      - MASTER_KEY=${MASTER_KEY:-dev-master-key-change-me}
+      - NODE_ENV=production
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build: ./khetifyApp
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo-data:
