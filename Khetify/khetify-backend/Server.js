@@ -53,6 +53,7 @@ const costingRoutes = require("./routes/Costing/costingRoutes");
 const shipmentCostRoutes = require("./routes/Transport/shipmentCostRoutes");
 const ownerRoutes = require("./routes/Analytics/ownerRoutes");
 const auditRoutes = require("./routes/Audit/auditRoutes");
+const shopRoutes = require("./routes/Shop/shopRoutes"); // Public customer storefront (/customer-shop) — browse + consumer auth + checkout
 const sellerRoutes = require("./routes/Seller/sellerRoutes"); // Seller-side IMS (Phase 1: auth + portal)
 const sellerWarehouseRoutes = require("./routes/Seller/sellerWarehouseRoutes"); // Seller warehouses (Phase 2b)
 const sellerCatalogRoutes = require("./routes/Seller/sellerCatalogRoutes"); // Seller read-only catalog (Phase 2c)
@@ -96,7 +97,7 @@ app.use(pinoHttp({ logger, customProps: (req) => ({ reqId: req.id }), autoLoggin
 const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many attempts, try again later" } });
 app.use("/api", globalLimiter);
-app.use(["/api/company/login", "/api/company/register", "/api/company/forgot-password", "/api/company/reset-password", "/api/driver/login", "/api/seller/login", "/api/seller/register", "/api/admin/login"], authLimiter);
+app.use(["/api/company/login", "/api/company/register", "/api/company/forgot-password", "/api/company/reset-password", "/api/driver/login", "/api/seller/login", "/api/seller/register", "/api/admin/login", "/api/shop/auth/login", "/api/shop/auth/register"], authLimiter);
 
 // Defence in depth: a seller token may only reach /api/seller/*, and no other
 // principal may. Runs before every route mount; no-ops for tokenless/public
@@ -205,6 +206,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/purchasing", purchasingRoutes);
+app.use("/api/shop", shopRoutes); // public customer storefront (browse + consumer auth + checkout)
 app.use("/api/seller/warehouses", sellerWarehouseRoutes); // before /api/seller so the specific path wins
 app.use("/api/seller/products", sellerCatalogRoutes); // read-only catalog of the linked company
 app.use("/api/seller/supply-orders", sellerSupplyRoutes); // seller-initiated supply requests

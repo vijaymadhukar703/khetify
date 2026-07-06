@@ -63,6 +63,9 @@ const orderSchema = new mongoose.Schema(
     // Legacy denormalised name kept; customerId is the new source of truth.
     customerName: { type: String },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
+    // Public storefront shopper who placed this order (salesChannel "website").
+    // Additive: null for all existing/company/seller-created orders.
+    consumerId: { type: mongoose.Schema.Types.ObjectId, ref: "Consumer", default: null },
     billingAddress: { type: mongoose.Schema.Types.Mixed },
     shippingAddress: { type: mongoose.Schema.Types.Mixed },
 
@@ -98,6 +101,7 @@ orderSchema.index({ companyId: 1, invoiceNumber: 1 });
 orderSchema.index({ ownerType: 1, ownerId: 1, placedAt: -1 });
 orderSchema.index({ ownerType: 1, ownerId: 1, status: 1 });
 orderSchema.index({ ownerType: 1, ownerId: 1, invoiceNumber: 1 });
+orderSchema.index({ consumerId: 1, placedAt: -1 }); // storefront: a shopper's order history
 
 // The owner (ownerType + ownerId) must always be identified. Legacy/company
 // callers that set only companyId are auto-derived to ownerType "company",

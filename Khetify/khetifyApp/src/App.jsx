@@ -103,6 +103,22 @@ import AdminCompanies from './pages/admin/AdminCompanies';
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail';
 import AdminPlaceholder from './pages/admin/AdminPlaceholder';
 
+// 🛒 Customer storefront (/customer-shop/*): public browse + guest cart +
+//    consumer auth-at-checkout + COD. Fully self-contained (own providers +
+//    token "shopToken"); does not touch company/seller/admin routes.
+import { ShopAuthProvider } from './context/ShopAuthContext';
+import { CartProvider } from './context/CartContext';
+import ShopLayout from './Components/shop/ShopLayout';
+import RequireConsumer from './Components/shop/RequireConsumer';
+import ShopHome from './pages/shop/ShopHome';
+import ShopProducts from './pages/shop/ShopProducts';
+import ShopProductDetail from './pages/shop/ShopProductDetail';
+import ShopCart from './pages/shop/ShopCart';
+import ShopLogin from './pages/shop/ShopLogin';
+import ShopCheckout from './pages/shop/ShopCheckout';
+import ShopOrderSuccess from './pages/shop/ShopOrderSuccess';
+import ShopOrders from './pages/shop/ShopOrders';
+
 function App() {
   return (
     // 🔥 IMS: wraps the whole app so any page can read the plan via useSubscription()
@@ -253,6 +269,31 @@ function App() {
           <Route path="/admin/profile" element={<AdminPlaceholder title="Profile" profile />} />
           {/* Bare /admin/* under the layout → dashboard */}
           <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
+        </Route>
+
+        {/* ───────────── Customer storefront (/customer-shop/*) ───────────── */}
+        {/* Self-contained: own auth (shopToken) + guest cart. Public browse; */}
+        {/* login is only required at checkout / orders (RequireConsumer).      */}
+        <Route
+          path="/customer-shop"
+          element={
+            <ShopAuthProvider>
+              <CartProvider>
+                <ShopLayout />
+              </CartProvider>
+            </ShopAuthProvider>
+          }
+        >
+          <Route index element={<ShopHome />} />
+          <Route path="products" element={<ShopProducts />} />
+          <Route path="product/:listingId" element={<ShopProductDetail />} />
+          <Route path="cart" element={<ShopCart />} />
+          <Route path="login" element={<ShopLogin />} />
+          <Route path="checkout" element={<RequireConsumer><ShopCheckout /></RequireConsumer>} />
+          <Route path="order-success" element={<RequireConsumer><ShopOrderSuccess /></RequireConsumer>} />
+          <Route path="orders" element={<RequireConsumer><ShopOrders /></RequireConsumer>} />
+          {/* Unknown /customer-shop/* → storefront home */}
+          <Route path="*" element={<Navigate to="/customer-shop" replace />} />
         </Route>
 
         {/* 404 Redirect -> Ab ye seedha Register pe bhejega, Login pe nahi */}

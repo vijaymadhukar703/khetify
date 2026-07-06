@@ -31,7 +31,19 @@ module.exports = function principalRouteGuard(req, res, next) {
   }
 
   const isSeller = decoded.principalType === "seller";
+  const isConsumer = decoded.principalType === "consumer";
   const isSellerRoute = path === "/api/seller" || path.startsWith("/api/seller/");
+  const isShopRoute = path === "/api/shop" || path.startsWith("/api/shop/");
+
+  // A CONSUMER (storefront) token may ONLY touch /api/shop/*, and only a
+  // consumer token may reach the protected shop routes. (Public shop GETs carry
+  // no token and fell through above.)
+  if (isConsumer && !isShopRoute) {
+    return res.status(403).json({ success: false, message: "Customer access only" });
+  }
+  if (isShopRoute && !isConsumer) {
+    return res.status(403).json({ success: false, message: "Not a customer account" });
+  }
 
   if (isSellerRoute && !isSeller) {
     return res.status(403).json({ success: false, message: "Seller access only" });
