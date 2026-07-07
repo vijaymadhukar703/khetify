@@ -33,6 +33,15 @@ export const getAdminCompanies = (params = {}) => data(api.get("admin/companies"
 export const getAdminCompany = (id) => data(api.get(`admin/companies/${id}`));
 export const setAdminCompanyStatus = (id, status) => data(api.patch(`admin/companies/${id}/status`, { status }));
 
+/* ---- support chats (live company↔admin chat) ---- */
+// status: all | AI | WAITING_AGENT | AGENT | CLOSED
+export const getAdminChats = (status) =>
+  data(api.get("admin/chats", { params: status && status !== "all" ? { status } : {} }));
+export const getAdminChatMessages = (id) => data(api.get(`admin/chats/${id}/messages`));
+export const takeAdminChat = (id) => data(api.post(`admin/chats/${id}/take`));
+export const replyAdminChat = (id, message) => data(api.post(`admin/chats/${id}/reply`, { message }));
+export const closeAdminChat = (id) => data(api.post(`admin/chats/${id}/close`));
+
 /* ---- session helpers ---- */
 export const isAdminAuthed = () => !!localStorage.getItem(ADMIN_TOKEN_KEY);
 export const saveAdminSession = (token, admin) => {

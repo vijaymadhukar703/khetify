@@ -25,12 +25,22 @@ function initSocket(httpServer) {
   });
 
   io.on("connection", (socket) => {
-    // JWT payload is { id: companyId } in this app.
+    // JWT payload is { id: companyId } for a company OWNER token.
     if (socket.user && socket.user.id) {
       socket.join(`company:${socket.user.id}`);
     }
+    // Team-member tokens carry a distinct companyId (id === userId); join the
+    // company room too so company-scoped events (notifications, chat) reach them.
+    if (socket.user && socket.user.companyId) {
+      socket.join(`company:${socket.user.companyId}`);
+    }
     if (socket.user && socket.user.sellerId) {
       socket.join(`seller:${socket.user.sellerId}`);
+    }
+    // Platform admins share one room — the (single) super_admin sees every
+    // company's chat activity live.
+    if (socket.user && socket.user.principalType === "admin") {
+      socket.join("admins");
     }
     console.log("🔌 socket connected:", socket.id);
   });
@@ -52,4 +62,9 @@ function emitToSeller(sellerId, event, payload) {
   if (io) io.to(`seller:${sellerId}`).emit(event, payload);
 }
 
-module.exports = { initSocket, getIO, emitToCompany, emitToSeller };
+/** Broadcast to every connected platform admin (support inbox). */
+function emitToAdmins(event, payload) {
+  if (io) io.to("admins").emit(event, payload);
+}
+
+module.exports = { initSocket, getIO, emitToCompany, emitToSeller, emitToAdmins };

@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { classifyAllCompanies } = require("../services/abcService");
 const outbox = require("../services/outboxService");
 const { reconcileAllCompanies } = require("../services/reconciliationService");
+const chatService = require("../services/chatService");
 
 /**
  * Starts background jobs. Called once from Server.js after the DB connects.
@@ -24,6 +25,17 @@ function startJobs() {
       if (r.processed) console.log(`📤 Outbox: ${r.delivered} delivered, ${r.failed} failed`);
     } catch (err) {
       console.error("Outbox dispatch failed:", err.message);
+    }
+  });
+
+  // Support chat inactivity sweep — every minute, auto-close threads idle >10 min.
+  // Backend-driven so it survives browser reload/close and server restarts.
+  cron.schedule("* * * * *", async () => {
+    try {
+      const n = await chatService.closeInactiveConversations();
+      if (n) console.log(`💤 Support chat: auto-closed ${n} inactive conversation(s)`);
+    } catch (err) {
+      console.error("Chat inactivity sweep failed:", err.message);
     }
   });
 

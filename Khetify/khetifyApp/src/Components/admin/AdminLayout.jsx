@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import TopNav from '../TopNav';
 import Sidebar from '../Sidebar';
 import { getAdminUser, clearAdminSession } from '../../lib/adminApi';
+import { disconnectAdminSocket } from '../../lib/socket';
 
 // Sidebar entries for the platform admin. Dashboard + Companies are wired;
 // the rest are placeholders that render their (empty-state) page without
@@ -10,6 +11,7 @@ import { getAdminUser, clearAdminSession } from '../../lib/adminApi';
 const ADMIN_ENTRIES = [
   { to: '/admin/dashboard', icon: 'grid_view', title: 'Dashboard' },
   { to: '/admin/companies', icon: 'apartment', title: 'Companies' },
+  { to: '/admin/support', icon: 'chat', title: 'Support Chats' },
   // { to: '/admin/sellers', icon: 'storefront', title: 'Sellers' },
   // { to: '/admin/pending', icon: 'hourglass_empty', title: 'Pending Requests' },
   // { to: '/admin/approved', icon: 'verified', title: 'Approved Records' },
@@ -34,6 +36,7 @@ const AdminLayout = () => {
     });
 
   const logout = () => {
+    disconnectAdminSocket();
     clearAdminSession();
     navigate('/admin/login', { replace: true });
   };
