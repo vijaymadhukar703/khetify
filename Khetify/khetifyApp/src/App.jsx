@@ -101,6 +101,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCompanies from './pages/admin/AdminCompanies';
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail';
+import AdminSupportChats from './pages/admin/AdminSupportChats';
 import AdminPlaceholder from './pages/admin/AdminPlaceholder';
 
 // 🛒 Customer storefront (/customer-shop/*): public browse + guest cart +
@@ -261,6 +262,7 @@ function App() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/companies" element={<AdminCompanies />} />
           <Route path="/admin/companies/:id" element={<AdminCompanyDetail />} />
+          <Route path="/admin/support" element={<AdminSupportChats />} />
           {/* UI-only sections + quick filters — present so navigation never breaks */}
           <Route path="/admin/sellers" element={<AdminPlaceholder title="Sellers" subtitle="Review and approve registered sellers." icon="storefront" />} />
           <Route path="/admin/pending" element={<Navigate to="/admin/companies?status=pending" replace />} />

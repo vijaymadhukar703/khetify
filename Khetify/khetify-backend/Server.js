@@ -27,6 +27,8 @@ const warehouseRoutes = require("./routes/Warehouse/warehouseRoutes");
 const supplyRoutes = require("./routes/Supply/supplyRoutes");
 const notificationRoutes = require("./routes/Notification/notificationRoutes");
 const supportRoutes = require("./routes/Support/supportRoutes");
+const chatRoutes = require("./routes/Support/chatRoutes"); // company↔admin live support chat (company side)
+const adminChatRoutes = require("./routes/Support/adminChatRoutes"); // live support chat (admin side)
 const lotRoutes = require("./routes/Inventory/lotRoutes");
 const transportRoutes = require("./routes/Transport/transportRoutes");
 const orderRoutes = require("./routes/Order/orderRoutes");
@@ -167,6 +169,7 @@ app.use("/api/product", productRoutes);
 
 // Auth (identity + capabilities for the frontend)
 app.use("/api/auth", authRoutes);
+app.use("/api/admin/chats", adminChatRoutes); // live support chat (admin) — before /api/admin so the specific path wins
 app.use("/api/admin", adminRoutes); // platform admin: company review/approval + dashboard
 
 // IMS
@@ -202,6 +205,7 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/supply-order", supplyRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/chat", chatRoutes); // company↔admin live support chat (company side)
 app.use("/api/orders", orderRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/users", userRoutes);

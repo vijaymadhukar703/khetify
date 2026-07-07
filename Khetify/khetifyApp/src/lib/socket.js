@@ -58,3 +58,30 @@ export function disconnectSellerSocket() {
     sellerSocket = null;
   }
 }
+
+// ── Admin socket ───────────────────────────────────────────────────────────
+// The platform admin session uses its OWN JWT ("adminToken"). On the backend
+// an admin token joins the shared "admins" room, so the support inbox updates
+// live. Kept separate from the company/seller sockets above.
+let adminSocket = null;
+
+export function getAdminSocket() {
+  const token = localStorage.getItem("adminToken");
+  if (!token) return null;
+  if (!adminSocket) {
+    adminSocket = io(SERVER_ORIGIN, {
+      auth: { token },
+      transports: ["websocket"],
+      autoConnect: true,
+    });
+    adminSocket.on("connect_error", (e) => console.warn("admin socket error:", e.message));
+  }
+  return adminSocket;
+}
+
+export function disconnectAdminSocket() {
+  if (adminSocket) {
+    adminSocket.disconnect();
+    adminSocket = null;
+  }
+}

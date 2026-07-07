@@ -8,6 +8,7 @@ import { useSubscription, FEATURES } from '../context/SubscriptionContext';
 import { usePermission } from '../context/PermissionContext';
 import { disconnectSocket } from '../lib/socket';
 import { getCompany } from '../lib/imsApi';
+import SupportChatWidget from './support/SupportChatWidget';
 
 // Company breadcrumb: resolve the active module for the current path.
 const resolveCompanyCrumb = (pathname) => {
@@ -113,6 +114,8 @@ const DashboardLayout = () => {
           <Outlet />
         </main>
       </div>
+      {/* Floating company↔support chat — reachable from every dashboard screen. */}
+      <SupportChatWidget />
     </div>
   );
 };
