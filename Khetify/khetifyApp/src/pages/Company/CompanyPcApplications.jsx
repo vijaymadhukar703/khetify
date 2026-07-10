@@ -170,11 +170,22 @@ const FormBuilderCard = () => {
       <p className="text-xs text-stone-500 mb-4">Map a field to a profile value to auto-fill it from the seller&apos;s profile (so they never re-type PAN/GSTIN/etc.).</p>
       {fields === null ? <p className="text-sm text-stone-400">Loading…</p> : (
         <div className="space-y-2">
+          {/* Column headings so each input's purpose is clear (aligned to the field row widths below). */}
+          {fields.length > 0 && (
+            <div className="hidden md:flex flex-wrap items-center gap-2 px-2 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+              <span className="w-40">Field label</span>
+              {/* <span className="w-32">Field Key</span> */}
+              <span className="w-24">Type</span>
+              <span className="w-52">Auto-fill from profile</span>
+              <span>Required</span>
+              <span className="ml-auto pr-1">Actions</span>
+            </div>
+          )}
           {fields.map((f, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2 border border-stone-100 rounded-lg p-2">
               <input className={`${cell} w-40`} value={f.label} placeholder="Label" onChange={(e) => update(i, { label: e.target.value })} />
-              <input className={`${cell} w-32`} value={f.key} placeholder="key" onChange={(e) => update(i, { key: e.target.value })} />
-              <select className={cell} value={f.type} onChange={(e) => update(i, { type: e.target.value })}>
+              {/* <input className={`${cell} w-32`} value={f.key} placeholder="key" onChange={(e) => update(i, { key: e.target.value })} /> */}
+              <select className={`${cell} w-24`} value={f.type} onChange={(e) => update(i, { type: e.target.value })}>
                 {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               <select className={`${cell} w-52`} value={f.profileField || ''} onChange={(e) => update(i, { profileField: e.target.value || null })}>

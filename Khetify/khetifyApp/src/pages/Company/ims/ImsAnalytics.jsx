@@ -35,7 +35,14 @@ const ImsAnalytics = () => {
   };
   useEffect(run, [name]); // re-run when report changes
 
-  const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
+  // Columns to hide from the table view (commented out per request: batch + abcClass).
+  const HIDDEN_COLS = ['batch', 'abcClass'];
+  // Header overrides — rename column headers without touching the data keys.
+  const COL_LABELS = { lot: 'Lot/Batch' };
+  const columns = useMemo(
+    () => (rows[0] ? Object.keys(rows[0]).filter((c) => !HIDDEN_COLS.includes(c)) : []),
+    [rows]
+  );
   const download = async () => {
     try { await downloadReportCsv(name, Object.fromEntries(Object.entries(filters).filter(([, v]) => v))); } catch (e) { apiError(e); }
   };
@@ -74,7 +81,7 @@ const ImsAnalytics = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead><tr className="bg-stone-50 border-b border-stone-200">
-                {columns.map((c) => <th key={c} className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-stone-400 whitespace-nowrap">{c}</th>)}
+                {columns.map((c) => <th key={c} className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-stone-400 whitespace-nowrap">{COL_LABELS[c] || c}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-stone-100">
                 {rows.map((r, i) => (

@@ -41,10 +41,13 @@ html {
    Wide data grids normally sit inside an overflow-x-auto wrapper with a
    min-w-[...px] on the <table>, which forces sideways scrolling on phones.
    Adding the `resp-table` class makes each row collapse into a labelled card
-   below the `sm` breakpoint: the header is hidden and every <td> shows its
-   `data-label` (set per cell) on the left with the value on the right.
+   below the `lg` breakpoint: the header is hidden and every <td> shows its
+   `data-label` (set per cell) on the left with the value on the right. The
+   breakpoint is `lg` (not `sm`) because these grids can be up to ~1100px wide,
+   so on tablets / small laptops they'd otherwise be cut off (the scroll bar is
+   hidden via .no-scrollbar). Below lg = stacked cards, no sideways scroll.
 --------------------------------------------------------------------------- */
-@media (max-width: 639px) {
+@media (max-width: 1023px) {
   table.resp-table {
     min-width: 0 !important; /* override the min-w-[...px] that forces scroll */
     width: 100%;
@@ -94,6 +97,17 @@ html {
   /* Action cells (buttons) span the full width and align to the end. */
   table.resp-table td.cell-actions { justify-content: flex-end; }
   table.resp-table td.cell-actions::before { content: none; }
+}
+
+/* Hide the scrollbar while keeping the element scrollable (touch / trackpad /
+   shift-wheel). Used on horizontally-scrolling table wrappers so the wide data
+   grids don't show a grey scrollbar line under the table on mid-size screens. */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE & old Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;            /* Chrome, Safari, Opera */
 }
 
 /* Shared custom scrollbar styling used by company and seller modals */
