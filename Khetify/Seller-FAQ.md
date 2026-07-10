@@ -1,367 +1,475 @@
-# Khetify — Seller Section FAQ (100 Questions & Answers)
+# Khetify — Seller Portal FAQ (100 Questions & Answers)
 
-> Yeh FAQ Khetify ke **Seller portal** ke liye hai — registration, onboarding, Principal Certificate (PC) applications, companies, inventory, warehouses, outbound/orders, customers, supply, team, analytics aur support ko cover karta hai.
-
----
-
-## 🌱 Registration & Onboarding
-
-**1. Khetify par seller kaise ban sakta hoon?**
-Seller landing page par "Register as Seller" button par click karke registration form bharein — naam, email, phone aur password dekar account create ho jata hai.
-
-**2. Seller register karne ke liye kya chahiye?**
-Shop/business name, contact details, address, GST/license (agar ho) aur bank/PAN details onboarding steps me maange jaate hain.
-
-**3. Seller banna free hai kya?**
-Account banana free hai; kuch advanced features plan/authorization par depend karte hain.
-
-**4. Registration ke baad kya karna hota hai?**
-Onboarding complete karein → profile bharein → jis company ka product bechna hai uske liye Principal Certificate (PC) apply karein.
-
-**5. Onboarding ke steps kya-kya hain?**
-Basic info → business/shop details → documents → profile setup → company ke liye PC application.
-
-**6. Onboarding adhura chhoda to data save rahega?**
-Haan, aap wahi se continue kar sakte hain jahan chhoda tha.
-
-**7. Ek email se kitne seller accounts ban sakte hain?**
-Ek email par ek hi seller account allowed hai.
-
-**8. Registration ke baad account turant chalu ho jata hai?**
-Account ban jata hai, par kisi company ke products bechne ke liye us company se PC issue hona zaroori hai.
-
-**9. Galat detail bhar di registration me, kya karun?**
-Profile/Settings me most details edit ho jaati hain; locked fields ke liye company ya support se contact karein.
-
-**10. Onboarding me help chahiye to?**
-Support team se contact karein — email/support channel se assistance milti hai.
+> This FAQ is designed for the **Khetify Seller Portal**. It covers seller registration, onboarding, Principal Certificate (PC) applications, company management, inventory, warehouses, orders, customers, supply, team management, analytics, and support.
 
 ---
 
-## 🔐 Login, Account & Security
+# 🌱 Registration & Onboarding
 
-**11. Seller login kaise karun?**
-Seller Login page par registered email aur password se login karein.
+### 1. How can I become a seller on Khetify?
 
-**12. Password bhool gaya to?**
-"Forgot Password" par jaakar email par reset link mangwayein aur naya password set karein.
+Click the **"Register as Seller"** button on the Seller landing page and complete the registration form by providing your name, email address, phone number, and password to create your account.
 
-**13. Password reset link kitni der valid hai?**
-Security ke liye link kuch time baad expire ho jata hai; expire hone par dobara request karein.
+### 2. What information is required to register as a seller?
 
-**14. Password change kaha se hota hai?**
-Login karke Settings/Profile me jaakar password update karein.
+You will need your business or shop name, contact information, business address, GST/license details (if applicable), and bank or PAN information during the onboarding process.
 
-**15. Mera data secure hai?**
-Haan, encryption aur role-based access control se aapka account aur data protected rehta hai.
+### 3. Is seller registration free?
 
-**16. Login nahi ho raha, kya karun?**
-Email/password verify karein, reset try karein; phir bhi na chale to support se contact karein.
+Yes, creating a seller account is free. Some advanced features may require additional authorization or depend on your subscription plan.
 
-**17. Account lock ho gaya to?**
-Kai baar galat password ya security reasons se lock ho sakta hai — support se unlock karwayein.
+### 4. What should I do after registration?
 
-**18. Ek se zyada log account use kar sakte hain?**
-Haan, Team section me members ko roles ke saath add kar sakte hain.
+Complete the onboarding process, update your seller profile, and apply for a **Principal Certificate (PC)** from the company whose products you want to sell.
 
----
+### 5. What are the onboarding steps?
 
-## 🏢 Companies & Principal Certificate (PC)
+The onboarding process includes:
 
-**19. Principal Certificate (PC) kya hota hai?**
-PC wo authorization hai jo ek company aapko deti hai taaki aap uske products officially bech sakein.
+* Basic Information
+* Business Details
+* Document Upload
+* Profile Setup
+* Principal Certificate (PC) Application
 
-**20. PC ke liye kaise apply karun?**
-Companies section me company search karke "Apply for PC" par click karein — application form bharein.
+### 6. If I leave onboarding incomplete, will my progress be saved?
 
-**21. Company kaise dhoondhun?**
-Companies page me search box me company ka naam ya region daalein.
+Yes. Your progress is automatically saved, allowing you to continue from where you left off.
 
-**22. Recommended companies kya hoti hain?**
-Aapke profile/region ke hisaab se suggest ki gayi companies jinke liye aap PC apply kar sakte hain.
+### 7. How many seller accounts can be created using one email address?
 
-**23. PC application form me kya bharna hota hai?**
-Aapke profile ki details auto-fill hoti hain, plus company ke apne custom fields bhare jaate hain.
+Only one seller account can be registered with a single email address.
 
-**24. PC application ka status kaise pata chalega?**
-Companies/Certifications page par status dikhta hai — In progress, PC issued (active) ya Rejected.
+### 8. Is my account activated immediately after registration?
 
-**25. "PC issued" ka matlab kya hai?**
-Iska matlab company ne aapko authorize kar diya — ab aap uske products bech sakte hain.
+Your seller account is created immediately after registration. However, you can start selling a company's products only after receiving a valid **Principal Certificate (PC)** from that company.
 
-**26. Meri PC application reject kyun hui?**
-Incomplete details, eligibility criteria ya company ki policy ke hisaab se reject ho sakti hai; dobara apply kar sakte hain.
+### 9. I entered incorrect information during registration. Can I update it?
 
-**27. Ek saath kitni companies ke liye PC le sakta hoon?**
-Aap multiple companies ke liye apply/PC hold kar sakte hain.
+Yes. Most profile information can be edited from the **Profile** or **Settings** page. For restricted fields, please contact the company administrator or the support team.
 
-**28. PC milne me kitna time lagta hai?**
-Ye company ke review par depend karta hai; status page par updates milte rahte hain.
+### 10. Where can I get help during onboarding?
 
-**29. PC reject hone ke baad dobara apply kar sakta hoon?**
-Haan, sahi details ke saath dobara apply kar sakte hain.
-
-**30. Kya bina PC ke company ke products bech sakta hoon?**
-Nahi, kisi company ke products bechne ke liye us company ka PC hona zaroori hai.
-
-**31. PC cancel/expire bhi ho sakta hai?**
-Haan, company policy ke hisaab se authorization revoke ya expire ho sakti hai.
-
-**32. Ek company ke liye kitni baar apply kar sakta hoon?**
-Ek active/in-progress application ke hote dobara apply ki zaroorat nahi; status wahi page par track hota hai.
+If you need assistance at any stage of onboarding, you can contact the Khetify Support team through the available support channels.
 
 ---
 
-## 📜 Certifications
+# 🔐 Login, Account & Security
 
-**33. Certifications page par kya hota hai?**
-Yahan aapki PC applications aur company-specific certification forms manage hote hain.
+### 11. How do I log in to my seller account?
 
-**34. Application form kaha bharta hoon?**
-Company select karne par uska custom application form Certifications page par khulta hai.
+Go to the Seller Login page and sign in using your registered email address and password.
 
-**35. Certificate documents upload karne padte hain?**
-Kuch companies additional documents maang sakti hain — form me specified fields ke hisaab se upload karein.
+### 12. I forgot my password. What should I do?
 
-**36. Application submit karne ke baad edit ho sakti hai?**
-Review se pehle kuch fields editable ho sakte hain; iske baad company se contact karein.
+Click **"Forgot Password"**, enter your registered email address, and follow the password reset instructions sent to your email.
 
-**37. Certification ka record kaha milega?**
-Certifications/Companies page par issued PCs aur unka status list hota hai.
+### 13. How long is the password reset link valid?
 
----
+For security reasons, the password reset link expires after a limited time. If it expires, simply request a new one.
 
-## 📊 Dashboard & Hub
+### 14. How can I change my password?
 
-**38. Seller dashboard par kya dikhta hai?**
-Sales, orders, inventory, active companies (PC) aur performance ka overview.
+After logging in, go to **Profile** or **Settings** and update your password from the account security section.
 
-**39. Hub kya hai?**
-Hub aapke saare key modules ka central launch point hai.
+### 15. Is my account data secure?
 
-**40. Administration/Admin section me kya hota hai?**
-Account-level settings, companies, team aur management-related options.
+Yes. Khetify uses encryption, secure authentication, and role-based access control (RBAC) to protect your account and business data.
 
-**41. Data kitni jaldi update hota hai?**
-Real-time — orders aur stock changes turant reflect hote hain.
+### 16. I am unable to log in. What should I do?
 
-**42. Mobile par bhi seller portal chalta hai?**
-Haan, portal responsive hai — mobile aur desktop dono par kaam karta hai.
+Verify that you are using the correct email address and password. If the issue persists, reset your password or contact the Khetify Support team.
 
----
+### 17. My account has been locked. What should I do?
 
-## 📦 Product Catalog
+An account may be temporarily locked after multiple unsuccessful login attempts or for security reasons. Please contact the support team to restore access.
 
-**43. Seller product catalog me kya hota hai?**
-Jin companies ka PC aapke paas hai, unke products aap catalog me manage/sell kar sakte hain.
+### 18. Can multiple users access the same seller account?
 
-**44. Product apne aap add hote hain ya manually?**
-Company ke authorized products aapke liste available ho jaate hain; aap unhe apne stock ke saath manage karte hain.
+Yes. You can add team members from the **Team Management** section and assign appropriate roles and permissions based on their responsibilities.
 
-**45. Product ka selling price main set kar sakta hoon?**
-Company ki pricing policy ke andar aap apne local selling details manage karte hain.
+# 🏢 Companies & Principal Certificate (PC)
 
-**46. Kis product ko active/inactive rakhun ye control hai?**
-Haan, aap apne catalog me products ko active ya hide kar sakte hain.
+### 19. What is a Principal Certificate (PC)?
 
-**47. Product out of stock ho to?**
-Stock 0 hone par product out-of-stock mark ho jata hai; restock karke wapas active karein.
+A Principal Certificate (PC) is an authorization issued by a company that allows you to officially sell its products through the Khetify platform.
 
-**48. Naye products kaise milte hain?**
-Jab company naye products add karti hai ya aap naya PC lete hain, tab aur products available ho jaate hain.
+### 20. How do I apply for a Principal Certificate (PC)?
 
----
+Go to the **Companies** section, search for the desired company, click **"Apply for PC"**, and complete the application form.
 
-## 🗃️ Inventory
+### 21. How can I find a company?
 
-**49. Seller inventory kaise manage hoti hai?**
-Inventory section me aapke products ka stock, batch aur availability track hoti hai.
+Use the search bar on the **Companies** page to search by company name or region.
 
-**50. Stock kaise add/update karun?**
-Inbound/adjustment options se stock badha/ghata sakte hain — har change record hota hai.
+### 22. What are Recommended Companies?
 
-**51. Available stock kaise calculate hota hai?**
-availableStock = online + offline − reserved; sale/reservation par automatically adjust hota hai.
+Recommended Companies are suggested based on your seller profile, business category, or region. You can apply for a Principal Certificate (PC) from any of these companies.
 
-**52. Batch aur expiry track hoti hai?**
-Haan, batch number aur expiry date ke saath stock control kar sakte hain.
+### 23. What information is required in the PC application form?
 
-**53. Expiry alert milta hai?**
-Haan, expiry近 aane par alert milta hai taaki wastage kam ho.
+Your basic profile information is automatically populated. You only need to complete the company-specific fields required for the application.
 
-**54. Stock movement history dekh sakta hoon?**
-Haan, har stock change ka append-only ledger maintain hota hai.
+### 24. How can I check the status of my PC application?
 
-**55. Inventory galat dikh rahi hai to?**
-Movements/ledger check karein; discrepancy ho to support me report karein.
+You can track your application status on the **Companies** or **Certifications** page. Common statuses include **In Progress**, **PC Issued (Active)**, and **Rejected**.
 
-**56. Low-stock alert milega?**
-Haan, stock minimum level se neeche jaane par alert milta hai.
+### 25. What does "PC Issued" mean?
 
----
+"PC Issued" means the company has approved your application and officially authorized you to sell its products.
 
-## 🏬 Warehouses & Operations
+### 26. Why was my PC application rejected?
 
-**57. Warehouse kaise add karun?**
-Warehouses section me naam, location aur capacity dekar warehouse add karein.
+Applications may be rejected due to incomplete information, failure to meet eligibility requirements, or the company's internal review policies. You may submit a new application after resolving the issues.
 
-**58. Multiple warehouses rakh sakta hoon?**
-Haan, ek se zyada storage locations add kiye ja sakte hain.
+### 27. Can I hold Principal Certificates from multiple companies?
 
-**59. Warehouse ke beech stock transfer ho sakta hai?**
-Haan, inter-warehouse transfer supported hai aur safely record hota hai.
+Yes. You can apply for and maintain active Principal Certificates for multiple companies.
 
-**60. Operations section me kya hota hai?**
-Inbound, outbound, transfers aur day-to-day stock activities manage hoti hain.
+### 28. How long does it take to receive a Principal Certificate?
 
-**61. Warehouse-wise stock dikhta hai?**
-Haan, har warehouse ka alag stock aur movement view milta hai.
+The approval timeline depends on the company's review process. You can monitor the latest status from your application dashboard.
 
-**62. Warehouse capacity track hoti hai?**
-Haan, capacity aur occupancy monitor kar sakte hain.
+### 29. Can I reapply if my PC application is rejected?
+
+Yes. You can submit a new application after updating the required information.
+
+### 30. Can I sell a company's products without a Principal Certificate?
+
+No. A valid Principal Certificate (PC) from the respective company is required before you can officially sell its products.
+
+### 31. Can a Principal Certificate expire or be revoked?
+
+Yes. A company may revoke or expire a Principal Certificate according to its policies and authorization terms.
+
+### 32. How many times can I apply for the same company?
+
+If you already have an active or pending application, you do not need to apply again. You can track the application status from the same page.
 
 ---
 
-## 🚚 Outbound / Orders
+# 📜 Certifications
 
-**63. Outbound kya hota hai?**
-Outbound section me aap customers ko products dispatch/deliver karte hain.
+### 33. What can I do on the Certifications page?
 
-**64. Order kaise process karun?**
-Order accept karke pack aur dispatch update karein — stock automatically adjust hota hai.
+The **Certifications** page allows you to manage your Principal Certificate applications and company-specific certification requests.
 
-**65. Order status kya-kya hote hain?**
-New, processing, dispatched, delivered aur cancelled jaise statuses.
+### 34. Where do I complete the application form?
 
-**66. Order cancel ho to stock wapas aata hai?**
-Haan, cancellation par reserved stock release ho jata hai.
+After selecting a company, its customized application form becomes available on the **Certifications** page.
 
-**67. Delivery Khetify karta hai kya?**
-Nahi, delivery aap khud arrange karte hain — platform sirf order visibility deta hai.
+### 35. Do I need to upload supporting documents?
 
-**68. Payment kaise milta hai?**
-Payment aap aur customer/company ke beech directly settle hota hai; Khetify payment execute nahi karta.
+Some companies may require additional documents. Upload the requested files according to the fields specified in the application form.
 
-**69. Order history kaha milti hai?**
-Outbound/Orders section me purane orders search aur filter kar sakte hain.
+### 36. Can I edit my application after submission?
 
-**70. Invoice generate hota hai?**
-Haan, GST-compliant invoicing supported hai.
+Certain fields may remain editable until the application enters the review process. Once the review has started, you should contact the company for any required changes.
+
+### 37. Where can I view my certification records?
+
+All issued Principal Certificates, certification requests, and their current statuses are available on the **Certifications** or **Companies** page.
 
 ---
 
-## 🏷️ Labels
+# 📊 Dashboard & Hub
 
-**71. Labels section kis kaam ka hai?**
-Products/lots ke liye labels aur barcodes generate karne ke liye.
+### 38. What information is available on the Seller Dashboard?
 
-**72. Barcode/label print kaise karun?**
-Label section me product/lot select karke label generate aur print karein.
+The Seller Dashboard provides an overview of your sales, orders, inventory, active company authorizations (PCs), and overall business performance.
 
-**73. Custom labels bana sakte hain?**
-Haan, product details ke saath labels customize kiye ja sakte hain.
+### 39. What is the Hub?
 
----
+The **Hub** serves as the central workspace where you can quickly access all major seller modules and business operations.
 
-## 👨‍🌾 Customers (CRM)
+### 40. What is available in the Administration section?
 
-**74. Customers section me kya hota hai?**
-Aapke buyers/farmers ki details, order history aur relationship management.
+The **Administration** section contains account settings, company management, team management, and other administrative controls.
 
-**75. Naya customer kaise add karun?**
-Customers section me customer profile create karke details save karein.
+### 41. How frequently is the data updated?
 
-**76. Customer ki purchase history dikhti hai?**
-Haan, har customer ke saare orders ek jagah track hote hain.
+Data is updated in real time. Changes to orders, inventory, and other business activities are reflected immediately.
 
-**77. Customer ko outstanding/credit track kar sakta hoon?**
-Haan, customer-wise dues aur credit details manage kar sakte hain.
+### 42. Can I use the Seller Portal on a mobile device?
 
-**78. Customer ko contact kaise karun?**
-Profile me save contact details se follow-up kar sakte hain.
+Yes. The Seller Portal is fully responsive and works on both mobile devices and desktop computers.
 
 ---
 
-## 🔄 Supply / Supply Requests
+# 📦 Product Catalog
 
-**79. Supply request kya hai?**
-Jab aapko company se stock chahiye, aap supply/replenishment request bhejte hain.
+### 43. What is the Product Catalog?
 
-**80. Supply request kaise banayein?**
-Supply section me product aur quantity select karke request submit karein.
+The Product Catalog contains products from companies for which you have an active Principal Certificate (PC), allowing you to manage and sell authorized products.
 
-**81. Supply request ka status kaise dekhun?**
-Supply page par request pending/approved/fulfilled status ke saath dikhti hai.
+### 44. Are products added automatically or manually?
 
-**82. Request reject ho to?**
-Company reason ke saath reject kar sakti hai; details update karke dobara request karein.
+Authorized products are automatically made available after your Principal Certificate is approved. You can then manage them within your inventory.
 
-**83. Supply aane par stock auto update hota hai?**
-Fulfilled supply receive karne par stock inventory me add ho jata hai.
+### 45. Can I set my own selling price?
 
----
+You can manage your local selling prices in accordance with the pricing policies established by the company.
 
-## 👥 Team / Users
+### 46. Can I control whether a product is active or inactive?
 
-**84. Team members kaise add karun?**
-Team section me member add karke unhe role assign karein.
+Yes. You can activate, deactivate, or hide products within your catalog based on your business requirements.
 
-**85. Role-based access hai kya?**
-Haan, alag members ko alag permissions (jaise staff, auditor read-only) di ja sakti hain.
+### 47. What happens when a product is out of stock?
 
-**86. Team member remove kar sakta hoon?**
-Haan, kisi bhi member ko deactivate/remove kiya ja sakta hai.
+When the available inventory reaches zero, the product is automatically marked as **Out of Stock**. It can be made available again after restocking.
 
-**87. Ek member kitne kaam kar sakta hai?**
-Uske role/permissions ke hisaab se — admin sab kuch, staff limited.
+### 48. How do new products appear in my catalog?
 
----
+New products become available when a company adds them to its catalog or when you receive a Principal Certificate from an additional company.
 
-## 📈 Analytics
+# 🗃️ Inventory
 
-**88. Analytics me kya milta hai?**
-Sales trends, top products, order performance aur inventory insights.
+### 49. How do I manage my inventory?
 
-**89. Sales report download kar sakta hoon?**
-Haan, analytics/reports ko view aur export kar sakte hain.
+The **Inventory** section allows you to monitor product stock levels, batch information, and product availability in one place.
 
-**90. Kaunse products best chal rahe hain ye pata chalta hai?**
-Haan, top-selling products aur slow movers analytics me dikhte hain.
+### 50. How can I add or update stock?
 
-**91. Company-wise performance dikhta hai?**
-Haan, jin companies ka PC hai unke products ki performance alag se track hoti hai.
+You can increase or decrease inventory using **Inbound** or **Stock Adjustment** operations. Every inventory change is recorded for audit and traceability.
 
----
+### 51. How is available stock calculated?
 
-## ⚙️ Profile, Settings & Support
+Available stock is calculated using the following formula:
 
-**92. Profile me kya update kar sakta hoon?**
-Business name, contact, address, logo aur bank/KYC details.
+**Available Stock = Online Stock + Offline Stock − Reserved Stock**
 
-**93. Profile details company ko dikhti hain?**
-PC application ke time aapki profile details auto-fill hoti hain, isliye profile complete rakhein.
+Stock levels are automatically updated whenever products are sold or reserved.
 
-**94. Settings me kya-kya options hain?**
-Account, password, notifications aur preferences manage kar sakte hain.
+### 52. Can I track batch numbers and expiry dates?
 
-**95. Notifications kaha milti hain?**
-Orders, PC status, supply updates aur alerts notifications me aate hain.
+Yes. The system supports inventory management using batch numbers and expiry dates for improved stock control and traceability.
 
-**96. Koi technical issue ho to help kaise milegi?**
-Support channel se ticket raise karein — team jaldi respond karti hai.
+### 53. Will I receive expiry alerts?
 
-**97. Account delete/deactivate kar sakta hoon?**
-Haan, request par account deactivate kiya ja sakta hai — support se contact karein.
+Yes. The system notifies you before products approach their expiry date, helping reduce wastage and improve inventory planning.
 
-**98. Khetify ki responsibility kya hai?**
-Khetify platform infrastructure, pricing visibility aur network access deta hai — delivery aur payment aap khud manage karte hain.
+### 54. Can I view the inventory movement history?
 
-**99. Meri details aur trade info secure hai?**
-Haan, enterprise-grade encryption aur access control se aapki information protected rehti hai.
+Yes. Every inventory transaction is recorded in an append-only inventory ledger, providing a complete audit trail of all stock movements.
 
-**100. Support ka best tarika kya hai?**
-Portal ke Support/Help option se request raise karein ya support email par contact karein — issue detail ke saath likhein taaki jaldi solve ho.
+### 55. What should I do if my inventory appears incorrect?
+
+Review the inventory movements and ledger history to identify discrepancies. If the issue persists, contact the Khetify Support team for assistance.
+
+### 56. Will I receive low stock alerts?
+
+Yes. The system automatically generates alerts when inventory falls below the configured minimum stock level.
 
 ---
 
-*© 2026 Khetify Technologies Pvt Ltd. — Seller Section FAQ*
+# 🏬 Warehouses & Operations
+
+### 57. How do I add a warehouse?
+
+Navigate to the **Warehouses** section and enter the warehouse name, location, and storage capacity to create a new warehouse.
+
+### 58. Can I manage multiple warehouses?
+
+Yes. You can create and manage multiple warehouse locations within your seller account.
+
+### 59. Can I transfer inventory between warehouses?
+
+Yes. Inter-warehouse inventory transfers are fully supported, and every transfer is securely recorded for tracking purposes.
+
+### 60. What can I do in the Operations section?
+
+The **Operations** section allows you to manage inbound shipments, outbound shipments, warehouse transfers, and other day-to-day inventory activities.
+
+### 61. Can I view inventory by warehouse?
+
+Yes. The system provides warehouse-specific inventory levels and stock movement history for each warehouse.
+
+### 62. Can I monitor warehouse capacity?
+
+Yes. You can track warehouse capacity, current occupancy, and available storage space.
+
+---
+
+# 🚚 Outbound / Orders
+
+### 63. What is the Outbound module?
+
+The **Outbound** module is used to manage product dispatches and deliveries to customers.
+
+### 64. How do I process an order?
+
+Accept the order, prepare and pack the items, then update the dispatch status. Inventory levels are automatically adjusted throughout the process.
+
+### 65. What order statuses are available?
+
+Orders typically progress through the following statuses:
+
+* New
+* Processing
+* Dispatched
+* Delivered
+* Cancelled
+
+### 66. What happens to inventory when an order is cancelled?
+
+When an order is cancelled, the reserved inventory is automatically released and returned to the available stock.
+
+### 67. Does Khetify handle product deliveries?
+
+No. Sellers are responsible for arranging deliveries. Khetify provides order management and visibility but does not manage logistics.
+
+### 68. How do I receive payment?
+
+Payments are settled directly between the seller and the customer or company. Khetify does not process or execute payments.
+
+### 69. Where can I view my order history?
+
+You can search, filter, and review all previous orders from the **Outbound** or **Orders** section.
+
+### 70. Can I generate invoices?
+
+Yes. The platform supports the generation of GST-compliant invoices.
+
+# 🏷️ Labels
+
+### 71. What is the Labels section used for?
+
+The **Labels** section allows you to generate and print product labels and barcodes for products and inventory lots.
+
+### 72. How do I print product labels or barcodes?
+
+Navigate to the **Labels** section, select the required product or inventory lot, generate the label, and print it.
+
+### 73. Can I create custom labels?
+
+Yes. Labels can be customized to include relevant product information such as product name, batch number, barcode, and other required details.
+
+---
+
+# 👨‍🌾 Customers (CRM)
+
+### 74. What can I do in the Customers section?
+
+The **Customers** section helps you manage buyer and farmer information, view order history, and maintain customer relationships.
+
+### 75. How do I add a new customer?
+
+Go to the **Customers** section, create a new customer profile, and save the required customer information.
+
+### 76. Can I view a customer's purchase history?
+
+Yes. All orders associated with a customer are available in one place, making it easy to review their purchase history.
+
+### 77. Can I track customer outstanding balances or credit?
+
+Yes. The system allows you to manage customer-wise outstanding balances, credit limits, and payment dues.
+
+### 78. How can I contact a customer?
+
+You can use the contact information stored in the customer's profile for follow-ups and communication.
+
+---
+
+# 🔄 Supply / Supply Requests
+
+### 79. What is a Supply Request?
+
+A **Supply Request** is used to request additional inventory or stock replenishment from a company.
+
+### 80. How do I create a Supply Request?
+
+Go to the **Supply** section, select the required products, specify the quantity, and submit your request.
+
+### 81. How can I check the status of my Supply Request?
+
+The **Supply** page displays the current status of each request, such as **Pending**, **Approved**, or **Fulfilled**.
+
+### 82. What happens if my Supply Request is rejected?
+
+The company may reject a request with a reason. You can update the required information and submit a new request.
+
+### 83. Is inventory updated automatically after receiving a supply?
+
+Yes. Once a fulfilled supply is received and confirmed, the inventory is automatically updated with the received stock.
+
+---
+
+# 👥 Team Management
+
+### 84. How do I add team members?
+
+Navigate to the **Team** section, invite a new member, and assign an appropriate role based on their responsibilities.
+
+### 85. Does the system support role-based access control?
+
+Yes. Different roles can be assigned with different permission levels, such as Administrator, Staff, or Read-Only Auditor.
+
+### 86. Can I remove a team member?
+
+Yes. You can deactivate or remove team members at any time from the **Team Management** section.
+
+### 87. What actions can a team member perform?
+
+A team member's access depends on the permissions assigned to their role. Administrators have full access, while staff members have limited permissions based on their responsibilities.
+
+---
+
+# 📈 Analytics
+
+### 88. What information is available in Analytics?
+
+The **Analytics** section provides insights into sales performance, order trends, top-selling products, inventory status, and overall business performance.
+
+### 89. Can I download sales reports?
+
+Yes. Reports can be viewed online and exported for further analysis or record keeping.
+
+### 90. Can I identify my best-selling products?
+
+Yes. Analytics highlights your top-performing products as well as slow-moving inventory to support better business decisions.
+
+### 91. Can I view performance by company?
+
+Yes. You can analyze the performance of products from each company for which you hold an active Principal Certificate (PC).
+
+# ⚙️ Profile, Settings & Support
+
+### 92. What information can I update in my profile?
+
+You can update your business name, contact information, business address, company logo, and bank or KYC details from your profile.
+
+### 93. Are my profile details visible to companies?
+
+Yes. Your profile information is automatically populated when you apply for a Principal Certificate (PC). Keeping your profile complete and up to date helps streamline the application process.
+
+### 94. What settings can I manage?
+
+The **Settings** section allows you to manage your account information, password, notification preferences, and other account preferences.
+
+### 95. Where can I view notifications?
+
+You will receive notifications for order updates, Principal Certificate (PC) status changes, supply requests, inventory alerts, and other important activities in the **Notifications** section.
+
+### 96. How can I get help if I experience a technical issue?
+
+You can raise a support ticket through the **Support** section. The Khetify Support team will review your request and respond as quickly as possible.
+
+### 97. Can I deactivate or delete my account?
+
+Yes. You can request account deactivation by contacting the Khetify Support team.
+
+### 98. What is Khetify's responsibility?
+
+Khetify provides the platform infrastructure, product visibility, inventory management tools, and business network access. Sellers are responsible for managing deliveries, customer relationships, and payment settlements.
+
+### 99. Is my business information secure?
+
+Yes. Khetify protects your business information using enterprise-grade encryption, secure authentication, and role-based access controls.
+
+### 100. What is the best way to contact support?
+
+Use the **Support** or **Help** section within the Seller Portal to submit a support request, or contact the support team via email. Please include detailed information about your issue to help the team resolve it more efficiently.
+
+---
+
+*© 2026 Khetify Technologies Pvt. Ltd. All rights reserved. Seller Portal FAQ.*
