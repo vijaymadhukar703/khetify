@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const GRN = require("../model/Inventory/GRN");
 const PutawayTask = require("../model/Inventory/PutawayTask");
 const PurchaseOrder = require("../model/Purchase/PurchaseOrder");
@@ -80,53 +79,10 @@ async function createGRN(companyId, { refType = "Manual", refId = null, warehous
   const expectedIncoming = (grnLines || []).reduce((s, l) => s + Math.max(0, Number(l.expectedQty || 0)), 0);
   await assertWarehouseCapacity({ ownerType: "company", ownerId: companyId, warehouseId, addQty: expectedIncoming });
 
-  // Enforce a CUMULATIVE available-stock cap: the total expectedQty for a
-  // product, summed across all its open GRNs (any status except cancelled),
-  // cannot exceed the product's tracked availableStock. This stops a second GRN
-  // from being created once earlier GRNs have already committed the full stock.
-  // Only catalog products that track stock (finite availableStock) are capped;
-  // "Other"/untracked products are skipped.
-  const trackedIds = (grnLines || []).map((l) => l.productId).filter(Boolean);
-  if (trackedIds.length) {
-    const objIds = trackedIds.map((id) => new mongoose.Types.ObjectId(String(id)));
-    const prods = new Map(
-      (await Product.find({ _id: { $in: objIds }, companyId }).select("productName availableStock"))
-        .map((p) => [String(p._id), p]),
-    );
-
-    // Already-committed quantity per product across existing (non-cancelled) GRNs.
-    const agg = await GRN.aggregate([
-      { $match: { companyId: new mongoose.Types.ObjectId(String(companyId)), status: { $ne: "cancelled" } } },
-      { $unwind: "$lines" },
-      { $match: { "lines.productId": { $in: objIds } } },
-      { $group: { _id: "$lines.productId", total: { $sum: "$lines.expectedQty" } } },
-    ]);
-    const committed = new Map(agg.map((a) => [String(a._id), Number(a.total) || 0]));
-
-    // This GRN's own requested quantity per product (multiple lines can repeat one).
-    const requested = new Map();
-    grnLines.forEach((l) => {
-      if (!l.productId) return;
-      const k = String(l.productId);
-      requested.set(k, (requested.get(k) || 0) + Number(l.expectedQty || 0));
-    });
-
-    for (const [pid, addQty] of requested) {
-      const p = prods.get(pid);
-      const avail = p ? Number(p.availableStock) : NaN;
-      if (!Number.isFinite(avail)) continue; // product doesn't track stock
-      const used = committed.get(pid) || 0;
-      const remaining = Math.max(0, avail - used);
-      if (addQty > remaining) {
-        throw httpErr(
-          `${p?.productName || "Product"}: only ${remaining} of ${avail} left to receive` +
-            (used ? ` (${used} already committed in other GRNs)` : "") +
-            `; you requested ${addQty}.`,
-          400,
-        );
-      }
-    }
-  }
+  // NOTE: a GRN receives (adds) stock, so its expected quantity is intentionally
+  // NOT capped against the product's current availableStock — operators may
+  // receive more than what is on hand. Only the warehouse capacity guard above
+  // constrains how much can be received.
 
   const grnNumber = await nextGrnNumber(companyId);
   const grn = await GRN.create({

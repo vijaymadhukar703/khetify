@@ -108,44 +108,26 @@ describe("postGRN() stock math", () => {
   });
 });
 
-describe("createGRN() enforces the available-stock cap", () => {
-  test("rejects a line whose expectedQty exceeds the product's availableStock", async () => {
+describe("createGRN() does NOT cap expectedQty against availableStock", () => {
+  // A GRN receives (adds) stock, so its expected quantity is intentionally not
+  // limited by the product's current availableStock. Only the warehouse
+  // capacity guard (tested separately below) constrains a GRN.
+  test("allows a line whose expectedQty exceeds the product's availableStock", async () => {
     const capped = await Product.create({ companyId, productName: "Basmati", skuNumber: "PBR-01", category: "Seeds", availableStock: 500 });
-    await expect(
-      grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 1000 }] }),
-    ).rejects.toMatchObject({ status: 400 });
-    // nothing was persisted
-    expect(await GRN.countDocuments({ companyId })).toBe(0);
-  });
-
-  test("allows a line at or below availableStock", async () => {
-    const capped = await Product.create({ companyId, productName: "Basmati", skuNumber: "PBR-02", category: "Seeds", availableStock: 500 });
-    const grn = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 500 }] });
+    const grn = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 1000 }] });
     expect(grn.grnNumber).toBeTruthy();
   });
 
-  test("cumulative: a second GRN cannot exceed the remaining stock", async () => {
+  test("allows a second GRN even after earlier GRNs committed the full stock", async () => {
     const capped = await Product.create({ companyId, productName: "Basmati", skuNumber: "PBR-03", category: "Seeds", availableStock: 5000 });
-    // first GRN uses the full 5000 → allowed
     await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 5000 }] });
-    // second GRN of any qty → 0 remaining → rejected
-    await expect(
-      grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 1 }] }),
-    ).rejects.toMatchObject({ status: 400 });
-    expect(await GRN.countDocuments({ companyId })).toBe(1);
-  });
-
-  test("cumulative: cancelled GRNs do not consume the cap", async () => {
-    const capped = await Product.create({ companyId, productName: "Basmati", skuNumber: "PBR-04", category: "Seeds", availableStock: 500 });
-    const first = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 500 }] });
-    await GRN.updateOne({ _id: first._id }, { status: "cancelled" });
-    // cancelled first GRN frees the stock → a new 500 GRN is allowed again
-    const second = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 500 }] });
+    // second GRN is no longer blocked by a "remaining stock" cap
+    const second = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId: capped._id, expectedQty: 5000 }] });
     expect(second.grnNumber).toBeTruthy();
+    expect(await GRN.countDocuments({ companyId })).toBe(2);
   });
 
-  test("skips the cap for products that don't track stock (availableStock unset)", async () => {
-    // productId from beforeEach has no availableStock — any qty is allowed.
+  test("allows any qty for products that don't track stock (availableStock unset)", async () => {
     const grn = await grnService.createGRN(companyId, { warehouseId, lines: [{ productId, expectedQty: 99999 }] });
     expect(grn.grnNumber).toBeTruthy();
   });
