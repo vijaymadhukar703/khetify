@@ -124,7 +124,6 @@ const CreateGrnModal = ({ onClose, onDone }) => {
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
   const [pos, setPos] = useState([]);
-  const [grns, setGrns] = useState([]);
   const [lots, setLots] = useState([]);
   const [f, setF] = useState({ warehouseId: '', refType: 'Manual', refId: '' });
   const [lines, setLines] = useState([{ productId: '', expectedQty: '' }]);
@@ -133,7 +132,6 @@ const CreateGrnModal = ({ onClose, onDone }) => {
     getWarehouses().then((r) => { const w = listOf(r); setWarehouses(w); if (w[0]) setF((s) => ({ ...s, warehouseId: w[0]._id })); }).catch(() => {});
     getProducts().then((r) => setProducts(listOf(r))).catch(() => {});
     getPurchaseOrders().then((r) => setPos(listOf(r))).catch(() => {});
-    getGRNs().then((r) => setGrns(listOf(r))).catch(() => {});
     getLots().then((r) => setLots(listOf(r))).catch(() => {});
   }, []);
 
@@ -152,37 +150,8 @@ const CreateGrnModal = ({ onClose, onDone }) => {
   const addLine = () => setLines((ls) => [...ls, { productId: '', expectedQty: '' }]);
   const rmLine = (i) => setLines((ls) => ls.filter((_, idx) => idx !== i));
 
-  // Quantity already committed for a product across existing (non-cancelled)
-  // GRNs — mirrors the backend cumulative cap so the UI shows what's really left.
-  const committedFor = (productId) => {
-    let sum = 0;
-    for (const g of grns) {
-      if (g.status === 'cancelled') continue;
-      for (const l of (g.lines || [])) {
-        const pid = String(l.productId?._id || l.productId || '');
-        if (pid === String(productId)) sum += Number(l.expectedQty || 0);
-      }
-    }
-    return sum;
-  };
-  // Stock still available to receive for a catalog product ("Other"/untracked → null = no cap).
-  const availOf = (productId) => {
-    if (!productId || productId === '__other__') return null;
-    const p = products.find((x) => x._id === productId);
-    const s = p ? Number(p.availableStock) : NaN;
-    if (!Number.isFinite(s)) return null; // no cap when stock isn't tracked
-    return Math.max(0, s - committedFor(productId));
-  };
-  // A line exceeds stock when it's a catalog product and qty > its availableStock.
-  const overStock = (l) => {
-    const avail = availOf(l.productId);
-    return avail != null && Number(l.expectedQty) > avail;
-  };
-  const hasOverStock = f.refType !== 'PurchaseOrder' && lines.some((l) => l.expectedQty && overStock(l));
-
   const submit = async () => {
     try {
-      if (hasOverStock) return toast('error', 'Quantity cannot exceed available stock');
       // Warehouse capacity pre-check (backend enforces the same rule): block a
       // GRN whose expected quantity would push the warehouse past capacity.
       const wh = warehouses.find((w) => String(w._id) === String(f.warehouseId));
@@ -244,8 +213,6 @@ const CreateGrnModal = ({ onClose, onDone }) => {
             // exactly like a PO line without a product match, to be resolved at
             // receive time.
             const isOther = l.productId === '__other__';
-            const avail = availOf(l.productId);
-            const over = overStock(l);
             return (
               <div key={i} className="flex items-start gap-2">
                 <div className="flex-1 min-w-0 space-y-2">
@@ -259,8 +226,7 @@ const CreateGrnModal = ({ onClose, onDone }) => {
                   )}
                 </div>
                 <div className="w-24 shrink-0">
-                  <input type="number" min="1" max={avail != null ? avail : undefined} placeholder="Qty" className={`${inputCls} ${over ? 'border-red-400' : ''}`} value={l.expectedQty} onChange={(e) => setLine(i, 'expectedQty', e.target.value)} />
-                  {avail != null && <p className={`text-[10px] font-bold mt-1 ${over ? 'text-red-500' : 'text-stone-400'}`}>Remaining: {avail}</p>}
+                  <input type="number" min="1" placeholder="Qty" className={inputCls} value={l.expectedQty} onChange={(e) => setLine(i, 'expectedQty', e.target.value)} />
                 </div>
                 {lines.length > 1 && <GhostBtn onClick={() => rmLine(i)}>✕</GhostBtn>}
               </div>
@@ -270,10 +236,8 @@ const CreateGrnModal = ({ onClose, onDone }) => {
         </div>
       )}
 
-      {hasOverStock && <p className="text-xs text-red-500 font-medium mt-3">⚠ One or more items exceed the available stock.</p>}
-
       <div className="mt-4">
-        <PrimaryBtn disabled={!f.warehouseId || (f.refType === 'PurchaseOrder' && !f.refId) || hasOverStock} onClick={submit}>Create GRN</PrimaryBtn>
+        <PrimaryBtn disabled={!f.warehouseId || (f.refType === 'PurchaseOrder' && !f.refId)} onClick={submit}>Create GRN</PrimaryBtn>
       </div>
     </Modal>
   );
