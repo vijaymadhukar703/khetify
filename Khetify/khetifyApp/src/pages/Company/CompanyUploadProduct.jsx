@@ -237,7 +237,7 @@ const CompanyUploadProduct = () => {
           <section>
             <h3 className="text-lg font-bold text-stone-900 mb-6 border-b border-stone-100 pb-2">Identification & Traceability</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">SKU Code</label><input id="sku" className={inputClass} value={formData.sku} onChange={handleInputChange} placeholder="e.g., KHT-UREA-001" /></div>
+              {/* <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">SKU Code</label><input id="sku" className={inputClass} value={formData.sku} onChange={handleInputChange} placeholder="e.g., KHT-UREA-001" /></div> */}
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">HSN Code</label><input id="hsn" className={inputClass} value={formData.hsn} onChange={handleInputChange} placeholder="e.g., 31021000" /></div>
               <div className="md:col-span-2"><label className="block text-sm font-semibold text-stone-700 mb-1.5">Manufacturer License No.</label><input id="license_no" className={inputClass} value={formData.license_no} onChange={handleInputChange} placeholder="e.g., MFG/LIC/2023/890" /></div>
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Country of Origin</label>
@@ -257,7 +257,16 @@ const CompanyUploadProduct = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">MRP (₹) <span className="text-[#EA2831]">*</span></label><input id="mrp" type="number" className={inputClass} value={formData.mrp} onChange={handleInputChange} placeholder="0.00" required /></div>
               <div>
-                <label className="block text-sm font-semibold text-stone-700 mb-1.5 flex justify-between">Cost Price (₹) <span className="text-[#EA2831]">*</span> <span className="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 text-stone-500 font-bold uppercase">INTERNAL ONLY</span></label>
+                {/* <label className="block text-sm font-semibold text-stone-700 mb-1.5 flex justify-between">Cost Price (₹) <span className="text-[#EA2831]">*</span> <span className="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 text-stone-500 font-bold uppercase">INTERNAL ONLY</span></label> */}
+                <label className="block text-sm font-semibold text-stone-700 mb-1.5 flex justify-between">
+  <span>
+    Cost Price (₹)<span className="text-[#EA2831]">*</span>
+  </span>
+
+  <span className="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 text-stone-500 font-bold uppercase">
+    INTERNAL ONLY
+  </span>
+</label>
                 <input id="cost_price" type="number" className={inputClass} value={formData.cost_price} onChange={handleInputChange} placeholder="0.00" required />
               </div>
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">GST (%)</label>
@@ -276,7 +285,7 @@ const CompanyUploadProduct = () => {
           <section>
             <h3 className="text-lg font-bold text-stone-900 mb-6 border-b border-stone-100 pb-2 uppercase tracking-wide">Supply & Logistics</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Available Stock <span className="text-[#EA2831]">*</span></label><input id="stock" type="number" className={inputClass} value={formData.stock} onChange={handleInputChange} placeholder="e.g., 5000" required /></div>
+              {/* <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Available Stock <span className="text-[#EA2831]">*</span></label><input id="stock" type="number" className={inputClass} value={formData.stock} onChange={handleInputChange} placeholder="e.g., 5000" required /></div> */}
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Minimum Order Quantity (MOQ)</label><input id="moq" type="number" className={inputClass} value={formData.moq} onChange={handleInputChange} placeholder="e.g., 10" /></div>
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Monthly Production Capacity</label><input id="capacity" className={inputClass} value={formData.capacity} onChange={handleInputChange} placeholder="e.g., 20000 Units" /></div>
               <div><label className="block text-sm font-semibold text-stone-700 mb-1.5">Packaging Type</label>
@@ -330,7 +339,7 @@ const CompanyUploadProduct = () => {
                 </div>
                 <p className="text-xs text-stone-400 mt-1">e.g. 1 Carton contains 50 units</p>
               </div>
-              <div className="md:col-span-2"><label className="block text-sm font-semibold text-stone-700 mb-1.5">Dispatch Location</label><input id="dispatch_location" className={inputClass} value={formData.dispatch_location} onChange={handleInputChange} placeholder="City, State (e.g., Pune, Maharashtra)" /></div>
+              {/* <div className="md:col-span-2"><label className="block text-sm font-semibold text-stone-700 mb-1.5">Dispatch Location</label><input id="dispatch_location" className={inputClass} value={formData.dispatch_location} onChange={handleInputChange} placeholder="City, State (e.g., Pune, Maharashtra)" /></div> */}
             </div>
           </section>
 

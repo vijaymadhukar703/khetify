@@ -61,6 +61,8 @@ const DashboardLayout = () => {
     ...MODULES.filter(visible).map((m) => ({
       to: m.path, icon: m.icon, title: m.title, isLocked: locked(m), lockTitle: 'Upgrade to unlock',
     })),
+    // Help resources — always available, no gating.
+    { to: '/faq', icon: 'quiz', title: 'FAQ' },
   ];
 
   const userName = localStorage.getItem('userName') || 'User';

@@ -100,9 +100,9 @@ const CompanyInventory = () => {
             { label: 'Units in Stock', value: rows.reduce((s, r) => s + r.stock, 0).toLocaleString('en-IN') },
             { label: 'Total Stock Value', value: formatINR(summary.stockValue) },
           ].map((stat, i) => (
-            <div key={i} className="bg-white border border-stone-200 rounded-xl p-5 sm:p-6 shadow-sm">
+            <div key={i} className="min-w-0 bg-white border border-stone-200 rounded-xl p-5 sm:p-6 shadow-sm">
               <p className="text-stone-500 text-[10px] font-bold uppercase mb-2 tracking-wider">{stat.label}</p>
-              <p className="text-2xl sm:text-3xl font-bold text-stone-900">{stat.value}</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-stone-900 break-words leading-tight tabular-nums">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -153,11 +153,11 @@ const CompanyInventory = () => {
         {/* Table */}
         <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
           <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[1000px] resp-table">
+            <table className="w-full text-left border-collapse min-w-[760px] resp-table">
               <thead>
                 <tr className="bg-stone-50 border-b border-stone-200">
                   {['Product Details', 'Category', 'Lot / Warehouse', 'Stock', 'Reorder At', 'Expiry', 'Status'].map((h) => (
-                    <th key={h} className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h}</th>
+                    <th key={h} className="px-4 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -167,19 +167,19 @@ const CompanyInventory = () => {
                   const badge = expiryBadge(item.expiryDate);
                   return (
                     <tr key={item.id} className="hover:bg-stone-50/30 transition-colors">
-                      <td data-label="Product Details" className="px-6 py-5">
+                      <td data-label="Product Details" className="px-4 py-5">
                         <p className="font-bold text-stone-900 text-sm">{item.name}</p>
                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Lot: {item.lotNo}</p>
                       </td>
-                      <td data-label="Category" className="px-6 py-5 text-sm text-stone-500 font-medium">{item.category}</td>
-                      <td data-label="Lot / Warehouse" className="px-6 py-5 text-sm">
+                      <td data-label="Category" className="px-4 py-5 text-sm text-stone-500 font-medium">{item.category}</td>
+                      <td data-label="Lot / Warehouse" className="px-4 py-5 text-sm">
                         <p className="text-stone-900 font-medium">{item.warehouse}</p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                       </td>
-                      <td data-label="Stock" className="px-6 py-5 text-sm text-stone-900 font-bold">{item.stock.toLocaleString('en-IN')}</td>
-                      <td data-label="Reorder At" className="px-6 py-5 text-sm text-stone-500 font-medium">{item.reorderLevel.toLocaleString('en-IN')}</td>
-                      <td data-label="Expiry" className="px-6 py-5 text-sm text-stone-500 font-medium">{fmtDate(item.expiryDate)}</td>
-                      <td data-label="Status" className="px-6 py-5 text-sm">
+                      <td data-label="Stock" className="px-4 py-5 text-sm text-stone-900 font-bold">{item.stock.toLocaleString('en-IN')}</td>
+                      <td data-label="Reorder At" className="px-4 py-5 text-sm text-stone-500 font-medium">{item.reorderLevel.toLocaleString('en-IN')}</td>
+                      <td data-label="Expiry" className="px-4 py-5 text-sm text-stone-500 font-medium">{fmtDate(item.expiryDate)}</td>
+                      <td data-label="Status" className="px-4 py-5 text-sm">
                         <span className={`font-bold ${statusClasses(status)}`}>{status}</span>
                       </td>
                     </tr>

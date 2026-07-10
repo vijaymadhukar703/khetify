@@ -147,6 +147,8 @@ const SellerLayout = () => {
     { to: "/seller/hub", icon: "home", title: "Home", end: true },
     ...topModules,
     ...(adminVisible ? [{ to: SELLER_ADMIN_NAV.path, icon: SELLER_ADMIN_NAV.icon, title: SELLER_ADMIN_NAV.label }] : []),
+    // Help resources — always available, no gating.
+    { to: "/seller/faq", icon: "quiz", title: "FAQ" },
   ];
 
   // Locked entries: a plan-locked module routes the admin to Billing; a

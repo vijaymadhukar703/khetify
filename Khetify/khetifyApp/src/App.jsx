@@ -32,6 +32,7 @@ import CompanyUploadProduct from './pages/Company/CompanyUploadProduct';
 import CompanyProductCatalog from './pages/Company/CompanyProductCatalog';
 import CompanyReturns from './pages/Company/CompanyReturns';
 import CompanySupport from './pages/Company/CompanySupport';
+import CompanyFaq from './pages/Company/CompanyFaq';
 import CompanyOrders from './pages/Company/CompanyOrders';
 
 // 🔥 IMS: subscription / upgrade page
@@ -90,6 +91,7 @@ import SellerBilling from './pages/seller/SellerBilling';
 import SellerTeam from './pages/seller/SellerTeam';
 import SellerAdministration from './pages/seller/SellerAdministration';
 import SellerProfile from './pages/seller/SellerProfile';
+import SellerFaq from './pages/seller/SellerFaq';
 import { SellerSubscriptionProvider } from './context/SellerSubscriptionContext';
 import { SellerPermissionProvider } from './context/SellerPermissionContext';
 
@@ -186,6 +188,7 @@ function App() {
           <Route path="/pc-applications" element={<RequireCap capability="inventory:read"><CompanyPcApplications /></RequireCap>} />
           <Route path="/returns" element={<CompanyReturns />} />
           <Route path="/support" element={<CompanySupport />} />
+          <Route path="/faq" element={<CompanyFaq />} />
           <Route path="/notifications" element={<CompanyNotifications />} />
           <Route path="/users" element={<RequireCap capability="user:read"><CompanyUsers /></RequireCap>} />
           <Route path="/settings" element={<RequireCap capability="company:settings"><CompanySettings /></RequireCap>} />
@@ -234,6 +237,7 @@ function App() {
           <Route path="/seller/customers" element={<SellerCustomers />} />
           <Route path="/seller/outbound" element={<SellerOutbound />} />
           <Route path="/seller/billing" element={<SellerBilling />} />
+          <Route path="/seller/faq" element={<SellerFaq />} />
         </Route>
 
         {/* ───────────── Platform admin panel (/admin/*) ───────────── */}
