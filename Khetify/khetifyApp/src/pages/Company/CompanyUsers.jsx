@@ -158,11 +158,18 @@ const CompanyUsers = () => {
 const AddUserModal = ({ onClose, onDone }) => {
   const [f, setF] = useState({ name: '', email: '', phone: '', role: 'operations_manager', password: '', warehouseId: '' });
   const [warehouses, setWarehouses] = useState([]);
+  const [phoneErr, setPhoneErr] = useState('');
   useEffect(() => {
     getWarehouses().then((r) => setWarehouses(Array.isArray(r) ? r : r?.data || [])).catch(() => {});
   }, []);
   const u = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = async () => {
+    // Phone is optional, but when provided it must be a valid 10-digit number.
+    if (f.phone && !/^\d{10}$/.test(f.phone.trim())) {
+      setPhoneErr('Enter a valid 10-digit phone number');
+      return;
+    }
+    setPhoneErr('');
     try {
       // Drop empty optional fields so backend validation doesn't reject "".
       const { warehouseId, ...rest } = f;
@@ -177,7 +184,22 @@ const AddUserModal = ({ onClose, onDone }) => {
     <Modal title="Add Team Member" onClose={onClose}>
       <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /></Field>
       <Field label="Email"><input className={inputCls} value={f.email} onChange={u('email')} /></Field>
-      <Field label="Phone"><input className={inputCls} value={f.phone} onChange={u('phone')} placeholder="For driver / mobile login" /></Field>
+      <Field label="Phone">
+        <input
+          className={inputCls}
+          type="tel"
+          inputMode="numeric"
+          maxLength={10}
+          value={f.phone}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setF({ ...f, phone: digits });
+            if (phoneErr) setPhoneErr('');
+          }}
+          placeholder="For driver / mobile login"
+        />
+        {phoneErr && <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {phoneErr}</p>}
+      </Field>
       <Field label="Role">
         <select className={inputCls} value={f.role} onChange={u('role')}>
           {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}

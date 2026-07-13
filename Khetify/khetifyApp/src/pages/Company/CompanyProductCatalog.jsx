@@ -176,6 +176,7 @@ const CompanyProductCatalog = () => {
                   <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Category</th>
                   <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">SKU Number</th>
                   <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Cost Price (₹)</th>
                   <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">MRP (₹)</th>
                   <th className="px-6 py-5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
@@ -203,6 +204,7 @@ const CompanyProductCatalog = () => {
                     <td data-label="Status" className="px-6 py-4">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${product.productStatus.toLowerCase() === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>{product.productStatus}</span>
                     </td>
+                    <td data-label="Cost Price (₹)" className="px-6 py-4 text-sm text-stone-900 font-black">₹{product.costPrice ?? 0}</td>
                     <td data-label="MRP (₹)" className="px-6 py-4 text-sm text-stone-900 font-black">₹{product.mrp}</td>
                     <td className="px-6 py-4 text-right cell-actions">
                       <div className="flex justify-end gap-1">

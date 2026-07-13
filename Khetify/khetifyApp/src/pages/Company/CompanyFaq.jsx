@@ -14,7 +14,7 @@ const CompanyFaq = () => (
       featured: {
         title: 'Getting Started',
         description: 'Dekhiye kaise Khetify portal par company account banaye aur basic setup karein.',
-        embedUrl: '', // ← apni video ka URL yahan paste karein
+        embedUrl: '/company-getting-started.mp4', // public/ folder se serve hoti hai
       },
       demosHref: '', // ← "View all demo videos" ka link yahan daalein
       help: {

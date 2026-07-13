@@ -159,14 +159,21 @@ const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
   // can be created — the warehouse-transfer option is hidden and never default.
   const [f, setF] = useState({ toType: canTransfer ? 'warehouse' : 'customer', fromWarehouseId: '', toWarehouseId: '', toLabel: '', vehicleNo: '', driverName: '', driverPhone: '' });
   const [lines, setLines] = useState([{ inventoryId: '', qty: '' }]);
+  const [phoneErr, setPhoneErr] = useState('');
   useEffect(() => {
     getWarehouses().then((r) => setWarehouses(listOf(r))).catch(() => {});
     getWarehouseDirectory().then((r) => setWarehouseDir(Array.isArray(r) ? r : r?.data || [])).catch(() => {});
     getLots().then((r) => setLots(listOf(r))).catch(() => {});
   }, []);
   const submit = async () => {
+    // Driver phone must be a valid 10-digit mobile number.
+    if (!/^\d{10}$/.test(f.driverPhone.trim())) {
+      setPhoneErr('Enter a valid 10-digit driver phone number');
+      return;
+    }
+    setPhoneErr('');
     try {
-      const body = { toType: f.toType, toLabel: f.toLabel || (f.toType === 'warehouse' ? 'Warehouse transfer' : 'Customer'), fromWarehouseId: f.fromWarehouseId || undefined, vehicleNo: f.vehicleNo, driverName: f.driverName, driverPhone: f.driverPhone };
+      const body = { toType: f.toType, toLabel: f.toLabel || (f.toType === 'warehouse' ? 'Warehouse transfer' : 'Customer'), fromWarehouseId: f.fromWarehouseId || undefined, vehicleNo: f.vehicleNo, driverName: f.driverName, driverPhone: f.driverPhone.trim() };
       if (f.toType === 'warehouse') {
         body.toWarehouseId = f.toWarehouseId;
         body.lines = lines.filter((l) => l.inventoryId && l.qty).map((l) => ({ inventoryId: l.inventoryId, qty: Number(l.qty) }));
@@ -199,7 +206,22 @@ const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 mt-2">
         <Field label="Vehicle No."><input className={inputCls} value={f.vehicleNo} onChange={(e) => setF({ ...f, vehicleNo: e.target.value })} /></Field>
         <Field label="Driver"><input className={inputCls} value={f.driverName} onChange={(e) => setF({ ...f, driverName: e.target.value })} /></Field>
-        <Field label="Driver phone"><input className={inputCls} value={f.driverPhone} onChange={(e) => setF({ ...f, driverPhone: e.target.value })} /></Field>
+        <Field label="Driver phone" required>
+          <input
+            className={inputCls}
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="10-digit number"
+            value={f.driverPhone}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setF({ ...f, driverPhone: digits });
+              if (phoneErr) setPhoneErr('');
+            }}
+          />
+          {phoneErr && <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {phoneErr}</p>}
+        </Field>
       </div>
       <div className="mt-3"><PrimaryBtn onClick={submit}>Plan Shipment</PrimaryBtn></div>
     </Modal>

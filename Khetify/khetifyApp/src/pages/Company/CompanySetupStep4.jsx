@@ -67,11 +67,22 @@ const [formData, setFormData] = useState({
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+const ALLOWED_DOC_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
 const handleFileChange = (e) => {
-  if (e.target.name === "gstCertificate") setGstFile(e.target.files[0]);
-  if (e.target.name === "registrationCertificate")
-    setRegFile(e.target.files[0]);
-  if (e.target.name === "panCard") setPanFile(e.target.files[0]);
+  const { name } = e.target;
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!ALLOWED_DOC_TYPES.includes(file.type)) {
+    toast.error("Only PDF or image files (JPG, PNG, WEBP) are allowed.");
+    e.target.value = "";
+    return;
+  }
+
+  if (name === "gstCertificate") setGstFile(file);
+  if (name === "registrationCertificate") setRegFile(file);
+  if (name === "panCard") setPanFile(file);
 };
 
    const handleContinue = async (e) => {
@@ -169,6 +180,7 @@ const handleFileChange = (e) => {
                   <input
                     type="file"
                     name="gstCertificate"
+                    accept=".pdf,image/*"
                     onChange={handleFileChange}
                     className="block w-full text-sm text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
                   />
@@ -201,6 +213,7 @@ const handleFileChange = (e) => {
                   <input
                     type="file"
                     name="registrationCertificate"
+                    accept=".pdf,image/*"
                     onChange={handleFileChange}
                     className="block w-full text-sm text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
                   />
@@ -234,6 +247,7 @@ const handleFileChange = (e) => {
                   <input
                     type="file"
                     name="panCard"
+                    accept=".pdf,image/*"
                     onChange={handleFileChange}
                     className="block w-full text-sm text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
                   />

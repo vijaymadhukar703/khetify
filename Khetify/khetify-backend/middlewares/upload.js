@@ -21,9 +21,20 @@ const storage = multer.diskStorage({
   },
 });
 
-// 🛑 File Filter (only images allowed)
+// 🛑 File Filter
+// KYC document fields accept PDF or images (scans / signed certificates);
+// every other field (logos, cover images, product/certification images)
+// stays image-only.
+const DOC_FIELDS = new Set([
+  "gstCertificate",
+  "registrationCertificate",
+  "panCard",
+]);
+
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|webp/;
+  const allowedTypes = DOC_FIELDS.has(file.fieldname)
+    ? /pdf|jpeg|jpg|png|webp/
+    : /jpeg|jpg|png|webp/;
 
   const extName = allowedTypes.test(
     path.extname(file.originalname).toLowerCase(),
@@ -34,13 +45,19 @@ const fileFilter = (req, file, cb) => {
   if (extName && mimeType) {
     cb(null, true);
   } else {
-    cb(new Error("Only images are allowed!"));
+    cb(
+      new Error(
+        DOC_FIELDS.has(file.fieldname)
+          ? "Only PDF or image files are allowed!"
+          : "Only images are allowed!",
+      ),
+    );
   }
 };
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB — roomy enough for scanned PDF certificates
   fileFilter,
 });
 
