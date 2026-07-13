@@ -35,10 +35,10 @@ const ImsAnalytics = () => {
   };
   useEffect(run, [name]); // re-run when report changes
 
-  // Columns to hide from the table view (commented out per request: batch + abcClass).
-  const HIDDEN_COLS = ['batch', 'abcClass'];
+  // Columns to hide from the table view (commented out per request: batch + abcClass + costPrice).
+  const HIDDEN_COLS = ['batch', 'abcClass', 'costPrice'];
   // Header overrides — rename column headers without touching the data keys.
-  const COL_LABELS = { lot: 'Lot/Batch' };
+  const COL_LABELS = { lot: 'Lot/Batch', value: 'MRP' };
   const columns = useMemo(
     () => (rows[0] ? Object.keys(rows[0]).filter((c) => !HIDDEN_COLS.includes(c)) : []),
     [rows]

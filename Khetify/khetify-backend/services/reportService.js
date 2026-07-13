@@ -35,19 +35,27 @@ function dateRange(from, to) {
 /* 1 ── stock on hand + valuation (weighted-average cost) */
 async function stockOnHand(companyId, params = {}) {
   const filter = applyWhFilter({ ownerId: companyId, ownerType: "company", availableStock: { $gt: 0 } }, params);
-  const rows = await Inventory.find(filter).populate("productId", "productName skuNumber category").populate("warehouseId", "name code");
-  return rows.map((r) => ({
-    product: r.productId?.productName || "—",
-    sku: r.productId?.skuNumber || "",
-    warehouse: r.warehouseId?.name || "Unassigned",
-    lot: r.lotNumber || r.batchNumber || "",
-    batch: r.batchNumber || "",
-    qty: r.availableStock,
-    costPrice: round2(r.costPrice || 0),
-    value: round2((r.availableStock || 0) * (r.costPrice || 0)),
-    expiry: r.expiryDate ? r.expiryDate.toISOString().slice(0, 10) : "",
-    abcClass: r.abcClass || "",
-  }));
+  const rows = await Inventory.find(filter).populate("productId", "productName skuNumber category price mrp").populate("warehouseId", "name code");
+  return rows.map((r) => {
+    const qty = r.availableStock || 0;
+    const salePrice = r.productId?.price || r.productId?.mrp || 0;
+    const mrp = r.productId?.mrp || r.productId?.price || 0;
+    return {
+      product: r.productId?.productName || "—",
+      sku: r.productId?.skuNumber || "",
+      warehouse: r.warehouseId?.name || "Unassigned",
+      lot: r.lotNumber || r.batchNumber || "",
+      batch: r.batchNumber || "",
+      qty: r.availableStock,
+      costPrice: round2(r.costPrice || 0),
+      // Product MRP (per unit) — shown as the "MRP" column on the UI.
+      value: round2(mrp),
+      // Stock worth at selling price (qty × MRP/price) — complements `value` (at cost).
+      amount: round2(qty * salePrice),
+      expiry: r.expiryDate ? r.expiryDate.toISOString().slice(0, 10) : "",
+      abcClass: r.abcClass || "",
+    };
+  });
 }
 
 /* 2 ── stock aging (days since the lot row was created ≈ receipt) */

@@ -103,27 +103,30 @@ const OrderHistory = () => {
 
       {/* Table */}
       <div className="bg-white border border-stone-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[720px] resp-table">
+        <table className="w-full text-left border-collapse min-w-[980px] resp-table">
           <thead>
             <tr className="border-b border-stone-200">
-              {['Ref', 'Type', 'Party', 'Status', 'Units', 'Value', 'Date', ''].map((h, i) => (
+              {['Ref', 'Type', 'From', 'To', 'Item', 'Lot No.', 'Qty', 'Status', 'MRP', 'Date', ''].map((h, i) => (
                 <th key={i} className="px-5 py-3.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
+              <tr><td colSpan={11} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={8} className="px-5 py-10 text-center text-stone-400">No history matches your filters yet.</td></tr>
+              <tr><td colSpan={11} className="px-5 py-10 text-center text-stone-400">No history matches your filters yet.</td></tr>
             ) : rows.map((r) => (
               <React.Fragment key={`${r.kind}-${r.id}`}>
                 <tr className="border-b border-stone-100 hover:bg-stone-50 cursor-pointer" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
                   <td data-label="Ref" className="px-5 py-3.5 font-bold text-stone-800 text-sm">{r.ref}</td>
                   <td data-label="Type" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${KIND_STYLE[r.kind]}`}>{kindLabel(r)}</span></td>
-                  <td data-label="Party" className="px-5 py-3.5 text-sm text-stone-600">{r.party}</td>
+                  <td data-label="From" className="px-5 py-3.5 text-sm text-stone-600">{r.from || '—'}</td>
+                  <td data-label="To" className="px-5 py-3.5 text-sm text-stone-600">{r.to || r.party || '—'}</td>
+                  <td data-label="Item" className="px-5 py-3.5 text-sm text-stone-600">{r.itemName || '—'}</td>
+                  <td data-label="Lot No." className="px-5 py-3.5 text-sm text-stone-600">{r.lotNo || '—'}</td>
+                  <td data-label="Qty" className="px-5 py-3.5 text-sm text-stone-600">{r.units || '—'}</td>
                   <td data-label="Status" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 capitalize ${STATUS_STYLE(r.status)}`}>{r.status}</span></td>
-                  <td data-label="Units" className="px-5 py-3.5 text-sm text-stone-600">{r.units || '—'}</td>
                   <td data-label="Value" className="px-5 py-3.5 text-sm font-semibold text-stone-800">{r.total ? formatINR(r.total) : '—'}</td>
                   <td data-label="Date" className="px-5 py-3.5 text-sm text-stone-500">{fmtDate(r.date)}</td>
                   <td className="px-5 py-3.5 text-right cell-actions">
@@ -132,7 +135,7 @@ const OrderHistory = () => {
                 </tr>
                 {expanded === r.id && (
                   <tr className="bg-stone-50/60">
-                    <td colSpan={8} className="px-5 py-4">
+                    <td colSpan={11} className="px-5 py-4">
                       <Timeline row={r} />
                     </td>
                   </tr>

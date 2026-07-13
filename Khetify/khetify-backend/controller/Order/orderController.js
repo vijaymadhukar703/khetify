@@ -256,6 +256,15 @@ exports.updateStatus = async (req, res) => {
 const TransferRequest = require("../../model/Transport/TransferRequest");
 const Shipment = require("../../model/Transport/Shipment");
 
+// Condense a list of item names / lot numbers into one cell value:
+// "—" when empty, the single value, or "First +N more" for multiple distinct.
+function summarizeList(arr) {
+  const vals = [...new Set((arr || []).filter(Boolean).map(String))];
+  if (!vals.length) return "—";
+  if (vals.length === 1) return vals[0];
+  return `${vals[0]} +${vals.length - 1} more`;
+}
+
 // Map a status onto the canonical 5-step timeline used by the UI.
 const ORDER_STEPS = ["created", "approved", "packed", "dispatched", "delivered"];
 function orderTimeline(status) {
@@ -294,11 +303,17 @@ exports.getHistory = async (req, res) => {
       for (const o of orders) {
         if (!dateBetween(o.placedAt || o.createdAt)) continue;
         if (productId && !(o.items || []).some((i) => String(i.productId) === String(productId))) continue;
+        const items = o.items || [];
         out.push({
           id: o._id,
           kind: "seller",
           ref: o.orderNumber || o.invoiceNumber || String(o._id).slice(-6),
           party: o.customerName || "—",
+          // Split party into from/to (a sale flows from us → the customer).
+          from: "—",
+          to: o.customerName || "—",
+          itemName: summarizeList(items.map((i) => i.name)),
+          lotNo: summarizeList(items.flatMap((i) => (i.allocations || []).map((a) => a.lotNumber || a.batchNumber))),
           status: o.status,
           total: o.totalAmount || 0,
           units: o.totalUnits || 0,
@@ -315,16 +330,23 @@ exports.getHistory = async (req, res) => {
       if (warehouseId) f.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
       const transfers = await TransferRequest.find(f)
         .sort({ createdAt: -1 }).limit(limit)
-        .populate("fromWarehouseId", "name").populate("toWarehouseId", "name").lean();
+        .populate("fromWarehouseId", "name").populate("toWarehouseId", "name")
+        .populate("productId", "productName price mrp").lean();
       for (const t of transfers) {
         if (!dateBetween(t.createdAt)) continue;
+        const unitPrice = t.productId?.price || t.productId?.mrp || 0;
         out.push({
           id: t._id,
           kind: "transfer",
           ref: `TR-${String(t._id).slice(-6).toUpperCase()}`,
           party: `${t.fromWarehouseId?.name || "?"} → ${t.toWarehouseId?.name || "?"}`,
+          from: t.fromWarehouseId?.name || "—",
+          to: t.toWarehouseId?.name || "—",
+          itemName: t.productId?.productName || "—",
+          lotNo: "—", // transfer requests target a product, not a specific lot
           status: t.status,
-          total: 0,
+          // Goods value = qty × unit price (transfers have no monetary total of their own).
+          total: (t.qty || 0) * unitPrice,
           units: t.qty || 0,
           date: t.createdAt,
           timeline: null,
@@ -339,9 +361,17 @@ exports.getHistory = async (req, res) => {
       if (warehouseId) f.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
       const shipments = await Shipment.find(f)
         .sort({ createdAt: -1 }).limit(limit)
-        .populate("fromWarehouseId", "name").populate("toWarehouseId", "name").lean();
+        .populate("fromWarehouseId", "name").populate("toWarehouseId", "name")
+        .populate("lines.productId", "productName price mrp").lean();
       for (const s of shipments) {
         if (!dateBetween(s.createdAt)) continue;
+        const lines = s.lines || [];
+        // Goods value = Σ (line qty × unit price). Falls back to freight cost when
+        // no line prices are available (e.g. a customer shipment with no lines).
+        const goodsValue = lines.reduce(
+          (sum, l) => sum + (l.qty || 0) * (l.productId?.price || l.productId?.mrp || 0),
+          0,
+        );
         out.push({
           id: s._id,
           kind: "shipment",
@@ -351,9 +381,14 @@ exports.getHistory = async (req, res) => {
           toType: s.toType,
           ref: s.lrNumber || `SH-${String(s._id).slice(-6).toUpperCase()}`,
           party: `${s.fromWarehouseId?.name || "?"} → ${s.toWarehouseId?.name || "?"}`,
+          from: s.fromWarehouseId?.name || s.fromLabel || "—",
+          to: s.toWarehouseId?.name || s.toLabel || "—",
+          itemName: summarizeList(lines.map((l) => l.productId?.productName)),
+          lotNo: summarizeList(lines.map((l) => l.lotNumber || l.batchNumber)),
           status: s.status,
-          total: s.freightCost || 0,
-          units: 0,
+          total: goodsValue || s.freightCost || 0,
+          // Sum the shipment lines so the quantity column is meaningful (was 0).
+          units: lines.reduce((n, l) => n + (l.qty || 0), 0),
           date: s.createdAt,
           timeline: (s.statusHistory || []).map((e) => ({ step: e.status, at: e.at })),
         });
@@ -364,7 +399,7 @@ exports.getHistory = async (req, res) => {
     let rows = out;
     if (q) {
       const needle = String(q).toLowerCase();
-      rows = rows.filter((r) => `${r.ref} ${r.party}`.toLowerCase().includes(needle));
+      rows = rows.filter((r) => `${r.ref} ${r.party} ${r.itemName} ${r.lotNo}`.toLowerCase().includes(needle));
     }
 
     rows.sort((a, b) => new Date(b.date) - new Date(a.date));

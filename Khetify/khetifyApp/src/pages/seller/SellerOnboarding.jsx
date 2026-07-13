@@ -141,7 +141,7 @@ const SellerOnboarding = () => {
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-stone-900">Contact &amp; address</h2>
-              <div><Label>Owner / contact person</Label><input className={field} value={contact.ownerName} onChange={(e) => setContact({ ...contact, ownerName: e.target.value })} /><Err e={fieldErrors.ownerName} /></div>
+              <div><Label>Owner Name</Label><input className={field} value={contact.ownerName} onChange={(e) => setContact({ ...contact, ownerName: e.target.value })} /><Err e={fieldErrors.ownerName} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Official email</Label><input className={field} value={contact.officialEmail} onChange={(e) => setContact({ ...contact, officialEmail: e.target.value })} /><Err e={fieldErrors.officialEmail} /></div>
                 <div><Label>Official phone</Label><input className={field} value={contact.officialPhone} onChange={(e) => setContact({ ...contact, officialPhone: e.target.value })} /><Err e={fieldErrors.officialPhone} /></div>
