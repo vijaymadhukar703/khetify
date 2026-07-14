@@ -25,4 +25,6 @@ const AuthBackground = ({ children }) => (
 
 
 
+
+
 export default AuthBackground;
