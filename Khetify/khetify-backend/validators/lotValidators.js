@@ -20,6 +20,11 @@ const receiveBody = z.object({
   // Accepted for backwards compatibility only — the service ignores any client
   // batchNumber and mirrors it from lotNumber (they can never diverge).
   batchNumber: z.string().trim().min(1).optional(),
+  // Manufacturer/supplier batch number — a SEPARATE, optional, display-only
+  // value stored in Inventory.mfgBatchNo (never part of the lot identity/index).
+  // Optional, so callers that don't send it (other roles) are unaffected. Zod
+  // strips unknown keys, so this MUST be listed or the field is dropped here.
+  mfgBatchNo: z.string().trim().max(120).optional(),
   expiryDate: z.coerce.date().nullable().optional(),
   mfgDate: z.coerce.date().nullable().optional(),
   qty: z.coerce.number().int().positive(),

@@ -28,8 +28,14 @@ const inventorySchema = new mongoose.Schema(
     },
 
     // Premium (batch_expiry) — optional
+    // NOTE: `batchNumber` is the lot IDENTITY key (part of the unique index
+    // below) and is shadowed to equal `lotNumber` by lotService.receiveLot —
+    // it is NOT a free-text manufacturer batch. The manufacturer/supplier batch
+    // number entered per lot lives in `mfgBatchNo` (optional, non-indexed) so it
+    // can be captured separately without touching the identity/index invariant.
     batchNumber: { type: String, default: null },
-    lotNumber:   { type: String, default: null }, 
+    lotNumber:   { type: String, default: null },
+    mfgBatchNo:  { type: String, default: null }, // manufacturer/supplier batch no. (optional, display-only)
     expiryDate: { type: Date, default: null },
     mfgDate: { type: Date, default: null }, // manufacturing date, captured per lot
 

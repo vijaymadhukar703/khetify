@@ -1,11 +1,37 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePermission } from '../../../context/PermissionContext';
 import CompanyInventory from '../CompanyInventory';
 import ImsLots from './ImsLots';
 import ImsLotDashboard from './ImsLotDashboard';
 
 // INVENTORY TRACKING — one module merging Stock Overview, Lot Management, and
-// Batch Management.
+// Batch Management. It renders a role-appropriate view of the SAME shared
+// ImsLots via props; no shared component's default behaviour is changed.
+//
+//  • Main Company (role "company_admin"): dedicated Lots-only view (no
+//    Stock/Batches tabs) with summary cards + stock status, Receive Lot HIDDEN
+//    (admins oversee receipts, don't perform them) and Transfer naturally
+//    absent (company_admin is denied inventory:transfer in permissions.js).
+//  • Company Warehouse / Warehouse Manager (warehouse-operations roles, see
+//    WAREHOUSE_ROLES): the SAME Lots-only view, but Receive Lot is KEPT and
+//    Transfer shows for those holding inventory:transfer (self-gated by <Can>).
+//  • Every OTHER role (sales_manager, transport_manager, pos_operator,
+//    support, …): the original 3-tab experience, untouched.
+//
+// The Stock (CompanyInventory) and Batch (ImsLotDashboard) components, their
+// APIs and data logic are never removed — only which view a role sees changes.
+
+// Company warehouse-operations roles that get the simplified Lots-only view.
+// These are warehouse-scoped (services/warehouseScope.js) and manage lots; the
+// row actions (Transfer / Receive / Create) self-gate on each role's own
+// capabilities via <Can>, so a role only ever sees actions it already had.
+const WAREHOUSE_ROLES = new Set([
+  'operations_manager', // active consolidated warehouse/operations role
+  'warehouse_manager',  // legacy warehouse manager
+  'warehouse_operator', // legacy warehouse operator
+  'inventory_manager',  // legacy inventory manager
+]);
 
 const TABS = [
   { key: 'stock', label: 'Stock', icon: 'list_alt', render: () => <CompanyInventory /> },
@@ -14,7 +40,29 @@ const TABS = [
 ];
 
 const InventoryTracking = () => {
+  const { role } = usePermission();
   const [params, setParams] = useSearchParams();
+
+  const isMainCompany = role === 'company_admin';
+  const isWarehouse = WAREHOUSE_ROLES.has(role);
+
+  // ── Simplified Lots-only view (Main Company + Company Warehouse) ──
+  // Lots page directly: no tabs / no tab arrows; stale ?tab=… params are ignored
+  // (never read here), so /inventory always lands on Lots. Full-width wrapper
+  // (no max-w-7xl) so the wider `fluid` Lots table uses the available content
+  // area. Only main Company hides Receive Lot; the warehouse keeps it.
+  if (isMainCompany || isWarehouse) {
+    return (
+      <div className="w-full px-3 sm:px-5 py-6">
+        <h1 className="text-2xl font-bold text-stone-900 mb-1">Inventory</h1>
+        {/* <p className="text-stone-500 mb-5">Track stock on hand and lots.</p> */}
+
+        <ImsLots showSummary showStockStatus paginate showBatchNo fluid requireWarehouse hideReceive={isMainCompany} />
+      </div>
+    );
+  }
+
+  // ── Every other role: original Stock / Lots / Batches tabs (unchanged). ──
   const active = TABS.find((t) => t.key === params.get('tab')) || TABS[0];
 
   return (

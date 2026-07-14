@@ -136,6 +136,7 @@ async function receiveLot({
   warehouseId = null,
   lotNumber,
   batchNumber,
+  mfgBatchNo,
   expiryDate = null,
   mfgDate = null,
   qty,
@@ -170,6 +171,13 @@ async function receiveLot({
   lotNumber = lot;
   batchNumber = lot;
   const setFields = { lotNumber: lot, batchNumber: lot };
+  // Manufacturer/supplier batch number — a SEPARATE, optional, display-only
+  // value. It never participates in the lot identity/index, so it can't clash
+  // with the batchNumber shadow above. Trimmed; blank → left unset (null).
+  if (typeof mfgBatchNo === "string") {
+    const trimmed = mfgBatchNo.trim();
+    if (trimmed) setFields.mfgBatchNo = trimmed;
+  }
   if (expiryDate) setFields.expiryDate = expiryDate;
   if (mfgDate) setFields.mfgDate = mfgDate;
   if (typeof lowStockThreshold === "number") setFields.lowStockThreshold = lowStockThreshold;

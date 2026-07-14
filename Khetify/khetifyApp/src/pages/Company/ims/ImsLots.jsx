@@ -6,6 +6,7 @@ import {
   generateUnits, getUnits, markUnitsPrinted,
   daysToExpiry, expiryBadge, fmtDate,
 } from '../../../lib/imsApi';
+import { STATUS, statusOf, computeInventorySummary, formatINR } from '../../../lib/inventoryData';
 import { Modal, Field, inputCls, PrimaryBtn, GhostBtn, Th } from './ImsUi';
 import { ManifestModal } from '../../../Components/ims/TransferModals';
 import LotLabel from '../../../Components/ims/LotLabel';
@@ -19,12 +20,34 @@ const toast = (icon, title) =>
 const apiError = (err) =>
   toast('error', err?.response?.data?.message || err.message || 'Something went wrong');
 
+/** Stock status of a lot from quantity vs reorder level — the single rule used
+ *  by the Company summary cards, stock filter and table. */
+const stockStatusOf = (l) => statusOf({ stock: l.availableStock || 0, reorderLevel: l.lowStockThreshold || 0 });
+
+const PAGE_SIZE = 10; // Company Lots pagination — lots per page
+
 /**
  * Lots — receive stock lot-wise (lot no, mfg/expiry, warehouse) and transfer
  * lots between warehouses. The lot number is the single identity. Selling happens through
  * the Outbound flow — there is deliberately no Sell action here.
+ *
+ * Company-only configuration (all default to false, so every OTHER role keeps
+ * the original behaviour untouched):
+ *   showSummary     — render the summary cards + restocking alert above the list
+ *                     and show ALL lots (incl. zero-quantity / out-of-stock)
+ *                     so the card totals and the table use the same dataset.
+ *   showStockStatus — add the Stock Status column + the stock-status filter.
+ *   hideReceive     — hide the Receive Lot button (Create Lot is kept).
+ *   paginate        — paginate the table (10/page) with Prev/Next + page numbers.
+ *   showBatchNo     — add the Batch No. column + the Batch Number field in Create Lot.
+ *   fluid           — widen the page: drop the max-w-7xl cap + reduce inner padding.
+ *   requireWarehouse— Create/Receive Lot: make Warehouse mandatory (Unassigned
+ *                     shown but disabled). Company + Company Warehouse only.
  */
-const ImsLots = () => {
+const ImsLots = ({
+  showSummary = false, showStockStatus = false, hideReceive = false,
+  paginate = false, showBatchNo = false, fluid = false, requireWarehouse = false,
+} = {}) => {
   const navigate = useNavigate();
   const [lots, setLots] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -34,6 +57,8 @@ const ImsLots = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [stockFilter, setStockFilter] = useState('all'); // 'all'|STATUS.IN|STATUS.LOW|STATUS.OUT (Company view)
+  const [page, setPage] = useState(1); // Company pagination (1-based)
   const [modal, setModal] = useState(null); // { type: 'receive'|'transfer'|'label', lot? }
 
   const refresh = () =>
@@ -50,23 +75,70 @@ const ImsLots = () => {
   }, []);
 
   const visible = useMemo(() => {
-    const live = lots.filter((l) => l.availableStock > 0);
-    if (filter === 'expiring') return live.filter((l) => { const d = daysToExpiry(l.expiryDate); return d !== null && d >= 0 && d <= 90; });
-    if (filter === 'expired') return live.filter((l) => daysToExpiry(l.expiryDate) < 0);
-    return live;
-  }, [lots, filter]);
+    // Company view (showSummary) lists EVERY lot — including zero-quantity /
+    // out-of-stock / expired / unassigned — so the table matches Total Lots.
+    // Other roles keep the original live-only (availableStock > 0) behaviour.
+    let out = showSummary ? lots.slice() : lots.filter((l) => l.availableStock > 0);
+    if (filter === 'expiring') out = out.filter((l) => { const d = daysToExpiry(l.expiryDate); return d !== null && d >= 0 && d <= 90; });
+    else if (filter === 'expired') out = out.filter((l) => daysToExpiry(l.expiryDate) < 0);
+    if (showStockStatus && stockFilter !== 'all') out = out.filter((l) => stockStatusOf(l) === stockFilter);
+    return out;
+  }, [lots, filter, stockFilter, showSummary, showStockStatus]);
+
+  // Company summary — reuse the SAME shared helper the dashboard uses, over the
+  // SAME lot dataset, so the numbers can never disagree. No dummy/duplicated maths.
+  const rows = useMemo(
+    () =>
+      lots.map((l) => {
+        const p = l.productId || {};
+        return {
+          id: l._id,
+          stock: l.availableStock || 0,
+          reorderLevel: l.lowStockThreshold || 0,
+          price: p.mrp || 0,
+        };
+      }),
+    [lots]
+  );
+  const summary = useMemo(() => computeInventorySummary(rows), [rows]);
+
+  // Pagination (Company only) — applied AFTER all filters, on the filtered
+  // `visible` set. Filter changes reset to page 1 via the handlers below.
+  const totalPages = paginate ? Math.max(1, Math.ceil(visible.length / PAGE_SIZE)) : 1;
+  const currentPage = Math.min(page, totalPages);
+  const paged = paginate ? visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE) : visible;
+  const rangeStart = visible.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, visible.length);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white font-sora">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className={`flex-1 overflow-y-auto bg-white font-sora ${fluid ? 'p-2 sm:p-4' : 'p-4 sm:p-8'}`}>
+      <div className={`space-y-6 ${fluid ? 'max-w-none' : 'max-w-7xl mx-auto'}`}>
+
+        {/* Summary cards (Company) — COMPUTED from the live lots with the shared
+            helper, so they match the dashboard exactly. */}
+        {showSummary && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {[
+              { label: 'Total Lots', value: summary.total },
+              { label: 'Low / Out of Stock', value: summary.lowStock + summary.outOfStock },
+              { label: 'Units in Stock', value: rows.reduce((s, r) => s + r.stock, 0).toLocaleString('en-IN') },
+              { label: 'Total Stock Value', value: formatINR(summary.stockValue) },
+            ].map((stat, i) => (
+              <div key={i} className="min-w-0 bg-white border border-stone-200 rounded-xl p-5 sm:p-6 shadow-sm">
+                <p className="text-stone-500 text-[10px] font-bold uppercase mb-2 tracking-wider">{stat.label}</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-stone-900 break-words leading-tight tabular-nums">{stat.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Header row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {[['all', 'All Lots'], ['expiring', 'Expiring ≤ 90d'], ['expired', 'Expired']].map(([k, label]) => (
               <button
                 key={k}
-                onClick={() => setFilter(k)}
+                onClick={() => { setFilter(k); setPage(1); }}
                 className={`text-xs font-bold px-4 py-2 rounded-full border transition-colors ${
                   filter === k
                     ? 'bg-[#EA2831] border-[#EA2831] text-white'
@@ -76,35 +148,69 @@ const ImsLots = () => {
                 {label}
               </button>
             ))}
+            {/* Stock-status filter (Company) — operates on the SAME lot dataset and
+                the SAME statusOf rule as the cards, so "Low/Out" here == the card. */}
+            {showStockStatus && (
+              <select
+                value={stockFilter}
+                onChange={(e) => { setStockFilter(e.target.value); setPage(1); }}
+                className="text-xs font-bold border border-stone-200 rounded-full px-4 py-2 bg-white text-stone-600 focus:ring-[#EA2831]"
+                aria-label="Filter by stock status"
+              >
+                <option value="all">All Stock Status</option>
+                <option value={STATUS.IN}>In Stock</option>
+                <option value={STATUS.LOW}>Low Stock</option>
+                <option value={STATUS.OUT}>Out of Stock</option>
+              </select>
+            )}
           </div>
           {/* Create + Receive — both available to admin AND operations manager
-              (anyone holding lot:receive). Create = manual lot; Receive = scan. */}
+              (anyone holding lot:receive). Create = manual lot; Receive = scan.
+              hideReceive (Company) hides Receive Lot only; Create Lot is kept. */}
           <Can capability="lot:receive">
             <div className="flex gap-2">
               <GhostBtn onClick={() => setModal({ type: 'create' })}>
                 <span className="material-symbols-outlined text-base">add_box</span> Create Lot
               </GhostBtn>
-              <PrimaryBtn onClick={() => setModal({ type: 'receive' })}>
-                <span className="material-symbols-outlined text-base">qr_code_scanner</span> Receive Lot
-              </PrimaryBtn>
+              {!hideReceive && (
+                <PrimaryBtn onClick={() => setModal({ type: 'receive' })}>
+                  <span className="material-symbols-outlined text-base">qr_code_scanner</span> Receive Lot
+                </PrimaryBtn>
+              )}
             </div>
           </Can>
         </div>
 
+        {/* Record count — the list is never silently truncated */}
+        {showSummary && !loading && (
+          <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+            {paginate
+              ? `Showing ${rangeStart}–${rangeEnd} of ${visible.length} lots`
+              : `Showing ${visible.length} of ${lots.length} lots`}
+          </p>
+        )}
+
         {/* Table */}
         <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
           <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[1000px] resp-table">
+            <table className={`w-full text-left border-collapse resp-table ${showBatchNo ? 'min-w-[1150px]' : 'min-w-[1000px]'}`}>
               <thead>
                 <tr className="bg-stone-50 border-b border-stone-200">
-                  <Th>Lot No.</Th><Th>Product</Th><Th>Warehouse</Th>
-                  <Th>Mfg</Th><Th>Expiry</Th><Th>Qty</Th><Th>Status</Th><Th right>Actions</Th>
+                  <Th>Lot No.</Th>{showBatchNo && <Th>Batch No.</Th>}<Th>Product</Th><Th>Warehouse</Th>
+                  <Th>Mfg</Th><Th>Expiry</Th><Th>Qty</Th>
+                  {showStockStatus && <Th>Stock Status</Th>}
+                  <Th>{showStockStatus ? 'Expiry Status' : 'Status'}</Th><Th right>Actions</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {visible.map((lot) => {
+                {paged.map((lot) => {
                   const p = lot.productId || {};
                   const badge = expiryBadge(lot.expiryDate);
+                  const stock = stockStatusOf(lot);
+                  const stockCls =
+                    stock === STATUS.IN ? 'bg-green-50 text-green-700'
+                    : stock === STATUS.LOW ? 'bg-orange-50 text-orange-600'
+                    : 'bg-red-50 text-red-600';
                   return (
                     <tr key={lot._id} className="hover:bg-stone-50/30 transition-colors">
                       <td className="px-6 py-5" data-label="Lot No.">
@@ -112,6 +218,11 @@ const ImsLots = () => {
                           {lot.lotNumber || lot.batchNumber}
                         </span>
                       </td>
+                      {showBatchNo && (
+                        <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Batch No.">
+                          {lot.mfgBatchNo || '—'}
+                        </td>
+                      )}
                       <td className="px-6 py-5" data-label="Product">
                         <p className="font-bold text-stone-900 text-sm">{p.productName || '—'}</p>
                         <p className="text-[10px] font-bold text-stone-400 uppercase">{p.category || ''}</p>
@@ -120,7 +231,12 @@ const ImsLots = () => {
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Mfg">{fmtDate(lot.mfgDate)}</td>
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Expiry">{fmtDate(lot.expiryDate)}</td>
                       <td className="px-6 py-5 text-sm text-stone-900 font-bold" data-label="Qty">{lot.availableStock.toLocaleString('en-IN')}</td>
-                      <td className="px-6 py-5" data-label="Status">
+                      {showStockStatus && (
+                        <td className="px-6 py-5" data-label="Stock Status">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${stockCls}`}>{stock}</span>
+                        </td>
+                      )}
+                      <td className="px-6 py-5" data-label={showStockStatus ? 'Expiry Status' : 'Status'}>
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
                       </td>
                       <td className="px-6 py-5 cell-actions">
@@ -139,16 +255,55 @@ const ImsLots = () => {
                   );
                 })}
                 {!loading && visible.length === 0 && (
-                  <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-stone-400">No lots here.</td></tr>
+                  <tr><td colSpan={8 + (showStockStatus ? 1 : 0) + (showBatchNo ? 1 : 0)} className="px-6 py-12 text-center text-sm text-stone-400">No lots here.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Pagination (Company) — frontend paging over the filtered lot set */}
+        {paginate && !loading && visible.length > 0 && totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+              Showing {rangeStart}–{rangeEnd} of {visible.length} lots
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                disabled={currentPage <= 1}
+                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-base">chevron_left</span> Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`min-w-[36px] text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${
+                    n === currentPage
+                      ? 'bg-[#EA2831] border-[#EA2831] text-white'
+                      : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage((n) => Math.min(totalPages, n + 1))}
+                disabled={currentPage >= totalPages}
+                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next <span className="material-symbols-outlined text-base">chevron_right</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {(modal?.type === 'receive' || modal?.type === 'create') && (
         <ReceiveLotModal products={products} warehouses={warehouses} lots={lots} scanFirst={modal.type === 'receive'}
+          showBatchNo={showBatchNo} requireWarehouse={requireWarehouse}
           onClose={() => setModal(null)} onDone={() => { setModal(null); refresh(); }} />
       )}
       {modal?.type === 'transfer' && (
@@ -161,10 +316,11 @@ const ImsLots = () => {
 
 /* ---------- modals ---------- */
 
-const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, onClose, onDone }) => {
+const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, showBatchNo = false, requireWarehouse = false, onClose, onDone }) => {
   const [f, setF] = useState({
-    productId: '', warehouseId: '', lotNumber: '', mfgDate: '', expiryDate: '', qty: '', lowStockThreshold: '',
+    productId: '', warehouseId: '', lotNumber: '', mfgBatchNo: '', mfgDate: '', expiryDate: '', qty: '', lowStockThreshold: '',
   });
+  const [busy, setBusy] = useState(false); // prevents accidental duplicate submission
 
   // Live occupancy per warehouse (sum of availableStock across its lots) — the
   // same figure the Warehouses page shows. Used to pre-check capacity before we
@@ -208,6 +364,18 @@ const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, o
   };
 
   const submit = async () => {
+    if (busy) return; // guard against a double click while the request is in flight
+    // Validate required data and surface a clear message when something's missing.
+    if (!f.productId || !f.qty || Number(f.qty) <= 0 || !f.mfgDate || (lotMode === 'manual' && !f.lotNumber.trim())) {
+      toast('error', 'Please fill Product, Quantity, Manufacturing Date' + (lotMode === 'manual' ? ' and Lot Number.' : '.'));
+      return;
+    }
+    // Warehouse is mandatory for Company / Company Warehouse (Unassigned is a
+    // disabled placeholder there). Never enforced for roles that don't opt in.
+    if (requireWarehouse && !f.warehouseId) {
+      toast('error', 'Please select a Warehouse.');
+      return;
+    }
     // Capacity pre-check: block a lot that would push the chosen warehouse past
     // its capacity, and tell the operator exactly how much room is left. The
     // backend enforces the same rule, so this is UX only, never the guarantee.
@@ -223,12 +391,15 @@ const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, o
         return;
       }
     }
+    setBusy(true);
     try {
       const res = await receiveLot({
         productId: f.productId,
         // 'auto' → send undefined so the backend mints the Khetify lot number
         // (KH-<WH>-<YYYYMM>-<seq>); 'manual' → send the operator's typed value.
-        lotNumber: lotMode === 'manual' ? (f.lotNumber || undefined) : undefined,
+        lotNumber: lotMode === 'manual' ? (f.lotNumber.trim() || undefined) : undefined,
+        // Manufacturer/supplier batch number — separate optional value; trimmed.
+        mfgBatchNo: f.mfgBatchNo.trim() || undefined,
         warehouseId: f.warehouseId || null,
         mfgDate: f.mfgDate || null,
         expiryDate: f.expiryDate || null,
@@ -245,7 +416,7 @@ const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, o
       } else {
         onDone();
       }
-    } catch (err) { apiError(err); }
+    } catch (err) { apiError(err); } finally { setBusy(false); }
   };
 
   // Success state: print the lot label and/or generate unit barcodes in place.
@@ -308,20 +479,34 @@ const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, o
           </p>
         )}
       </Field>
+      {/* Batch Number — a SEPARATE optional value from the Lot Number; does not
+          affect lot-number generation. Rendered only where enabled (Company). */}
+      {showBatchNo && (
+        <Field label="Batch Number">
+          <input
+            className={inputCls}
+            value={f.mfgBatchNo}
+            onChange={u('mfgBatchNo')}
+            placeholder="Enter batch number"
+          />
+        </Field>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
         <Field label="Manufacturing Date *"><input type="date" className={inputCls} value={f.mfgDate} onChange={u('mfgDate')} /></Field>
         <Field label="Expiry Date"><input type="date" className={inputCls} value={f.expiryDate} onChange={u('expiryDate')} /></Field>
         <Field label="Quantity *"><input type="number" min="1" className={inputCls} value={f.qty} onChange={u('qty')} /></Field>
-        <Field label="Warehouse">
+        <Field label={requireWarehouse ? 'Warehouse *' : 'Warehouse'}>
           <select className={inputCls} value={f.warehouseId} onChange={u('warehouseId')}>
-            <option value="">Unassigned</option>
+            {/* Unassigned stays visible but becomes a non-selectable placeholder
+                when a warehouse is required (Company / Company Warehouse). */}
+            <option value="" disabled={requireWarehouse}>Unassigned</option>
             {warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
           </select>
         </Field>
         <Field label="Low-stock Alert At"><input type="number" className={inputCls} value={f.lowStockThreshold} onChange={u('lowStockThreshold')} placeholder="optional" /></Field>
       </div>
-      <PrimaryBtn disabled={!f.productId || !f.qty || !f.mfgDate || (lotMode === 'manual' && !f.lotNumber)} onClick={submit}>
-        <span className="material-symbols-outlined text-base">inventory</span> {scanFirst ? 'Receive Lot' : 'Create Lot'}
+      <PrimaryBtn disabled={busy || !f.productId || !f.qty || !f.mfgDate || (lotMode === 'manual' && !f.lotNumber) || (requireWarehouse && !f.warehouseId)} onClick={submit}>
+        <span className="material-symbols-outlined text-base">inventory</span> {busy ? 'Saving…' : (scanFirst ? 'Receive Lot' : 'Create Lot')}
       </PrimaryBtn>
     </Modal>
   );
