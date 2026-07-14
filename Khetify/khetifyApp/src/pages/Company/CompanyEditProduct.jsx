@@ -301,7 +301,7 @@ const CompanyEditProduct = () => {
                   <option value="0">0%</option><option value="5">5%</option><option value="12">12%</option><option value="18">18%</option>
                 </select>
               </div>
-              <div><label className={labelClass}>SKU Number</label><input name="skuNumber" value={formData.skuNumber} onChange={handleChange} className={inputClass} /></div>
+              {/* <div><label className={labelClass}>SKU Number</label><input name="skuNumber" value={formData.skuNumber} onChange={handleChange} className={inputClass} /></div> */}
               <div><label className={labelClass}>HSN Code</label><input name="hsnCode" value={formData.hsnCode} onChange={handleChange} className={inputClass} /></div>
             </div>
             {costing && (

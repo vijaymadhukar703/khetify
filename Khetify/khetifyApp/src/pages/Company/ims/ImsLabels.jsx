@@ -4,7 +4,7 @@ import Swal from 'sweetalert2';
 import {
   getLots, getUnits, generateUnits, markUnitsPrinted, scanCode, recallLot,
 } from '../../../lib/imsApi';
-import { Field, inputCls, PrimaryBtn, GhostBtn, Modal } from './ImsUi';
+import { Field, inputCls, PrimaryBtn, GhostBtn, Modal, SearchSelect } from './ImsUi';
 import Barcode128 from '../../../lib/barcode128';
 import LotLabel from '../../../Components/ims/LotLabel';
 import ScanBox from '../../../Components/ims/ScanBox';
@@ -162,9 +162,12 @@ const ImsLabels = () => {
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[220px]">
               <Field label="Lot">
-                <select className={inputCls} value={lotId} onChange={(e) => setLotId(e.target.value)}>
-                  {lots.map((l) => <option key={l._id} value={l._id}>{lotLabel(l)} (avail {l.availableStock})</option>)}
-                </select>
+                <SearchSelect
+                  value={lotId}
+                  onChange={setLotId}
+                  placeholder={lots.length ? 'Search lot…' : 'No lots yet'}
+                  options={lots.map((l) => ({ value: l._id, label: `${lotLabel(l)} (avail ${l.availableStock})` }))}
+                />
               </Field>
             </div>
             <Field label="Generate qty">

@@ -27,7 +27,7 @@ const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const { has, plan, loading: subLoading } = useSubscription();
-  const { can, loading: permLoading } = usePermission();
+  const { can, role, loading: permLoading } = usePermission();
 
   // The company must be approved before the module sidebar is usable. Until then
   // we hide the Sidebar entirely and let the page (Hub) show its under-review
@@ -57,11 +57,31 @@ const DashboardLayout = () => {
     if (m.feature === FEATURES.API_ACCESS) return !has(FEATURES.API_ACCESS);
     return false;
   };
-  const entries = [
+  // Operations + Orders are pinned into the sidebar for warehouse/staff users
+  // but NOT the company owner. The owner's token is always role 'company_admin'
+  // (see auth notes) — everyone else (warehouse staff, etc.) is non-owner and
+  // gets these two entries. Each is locked (visible but not navigable) when the
+  // user lacks the capability, so it never opens a page they'd be denied.
+  const isCompanyOwner = role === 'company_admin';
+  const warehouseExtras = (role && !isCompanyOwner)
+    ? [
+        { to: '/operations', icon: 'sync_alt', title: 'Operations', isLocked: !can('grn:read'), noUpsell: true, lockTitle: 'You do not have access to Operations' },
+        // { to: '/orders', icon: 'shopping_cart', title: 'Orders', isLocked: !can('order:read'), noUpsell: true, lockTitle: 'You do not have access to Orders' },
+      ]
+    : [];
+
+  const baseEntries = [
     { to: '/hub', icon: 'home', title: 'Home', end: true },
     ...MODULES.filter(visible).map((m) => ({
       to: m.path, icon: m.icon, title: m.title, isLocked: locked(m), lockTitle: 'Upgrade to unlock',
     })),
+  ];
+  // De-dupe by `to` so an extra the shared MODULES list already surfaced
+  // isn't shown twice.
+  const seen = new Set(baseEntries.map((e) => e.to));
+  const entries = [
+    ...baseEntries,
+    ...warehouseExtras.filter((e) => !seen.has(e.to)),
     // Help resources — always available, no gating.
     { to: '/faq', icon: 'quiz', title: 'FAQ' },
   ];
@@ -107,7 +127,9 @@ const DashboardLayout = () => {
             mobileOpen={mobileOpen}
             onMobileClose={() => setMobileOpen(false)}
             entries={entries}
-            onLocked={() => navigate('/billing')}
+            // Subscription locks route to Billing to upsell; access locks
+            // (e.g. warehouse Orders) have no upsell — clicking does nothing.
+            onLocked={(e) => { if (!e.noUpsell) navigate('/billing'); }}
           />
         )}
         {/* overflow-x-hidden stops a stray wide element from scrolling the whole

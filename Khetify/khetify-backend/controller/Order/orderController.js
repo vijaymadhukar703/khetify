@@ -299,10 +299,12 @@ exports.getHistory = async (req, res) => {
       const f = { companyId };
       if (status) f.status = status;
       if (sellerId) f.customerId = sellerId;
-      const orders = await Order.find(f).sort({ placedAt: -1 }).limit(limit).lean();
+      const orders = await Order.find(f).sort({ placedAt: -1 }).limit(limit)
+        .populate("items.productId", "mrp").lean();
       for (const o of orders) {
         if (!dateBetween(o.placedAt || o.createdAt)) continue;
-        if (productId && !(o.items || []).some((i) => String(i.productId) === String(productId))) continue;
+        // items.productId is now a populated { _id, mrp } doc, so compare on _id.
+        if (productId && !(o.items || []).some((i) => String(i.productId?._id || i.productId) === String(productId))) continue;
         const items = o.items || [];
         out.push({
           id: o._id,
@@ -316,6 +318,10 @@ exports.getHistory = async (req, res) => {
           lotNo: summarizeList(items.flatMap((i) => (i.allocations || []).map((a) => a.lotNumber || a.batchNumber))),
           status: o.status,
           total: o.totalAmount || 0,
+          // Per-unit MRP of the product(s) in this row (first priced item; 0 when unpriced).
+          mrp: items.find((i) => i.productId?.mrp)?.productId?.mrp || 0,
+          // Seller / customer this sale went to (shown alongside the To column).
+          seller: o.customerName || null,
           units: o.totalUnits || 0,
           date: o.placedAt || o.createdAt,
           timeline: orderTimeline(o.status),
@@ -347,6 +353,9 @@ exports.getHistory = async (req, res) => {
           status: t.status,
           // Goods value = qty × unit price (transfers have no monetary total of their own).
           total: (t.qty || 0) * unitPrice,
+          // Per-unit MRP of the transferred product.
+          mrp: t.productId?.mrp || 0,
+          seller: null, // internal warehouse→warehouse move, no seller
           units: t.qty || 0,
           date: t.createdAt,
           timeline: null,
@@ -362,6 +371,7 @@ exports.getHistory = async (req, res) => {
       const shipments = await Shipment.find(f)
         .sort({ createdAt: -1 }).limit(limit)
         .populate("fromWarehouseId", "name").populate("toWarehouseId", "name")
+        .populate("customerId", "name")
         .populate("lines.productId", "productName price mrp").lean();
       for (const s of shipments) {
         if (!dateBetween(s.createdAt)) continue;
@@ -372,6 +382,10 @@ exports.getHistory = async (req, res) => {
           (sum, l) => sum + (l.qty || 0) * (l.productId?.price || l.productId?.mrp || 0),
           0,
         );
+        // The seller / customer this shipment goes to (populated customer, else
+        // the free-text destination label for customer/seller shipments).
+        const sellerName = s.customerId?.name
+          || (["customer", "seller"].includes(s.toType) ? s.toLabel : null);
         out.push({
           id: s._id,
           kind: "shipment",
@@ -382,11 +396,14 @@ exports.getHistory = async (req, res) => {
           ref: s.lrNumber || `SH-${String(s._id).slice(-6).toUpperCase()}`,
           party: `${s.fromWarehouseId?.name || "?"} → ${s.toWarehouseId?.name || "?"}`,
           from: s.fromWarehouseId?.name || s.fromLabel || "—",
-          to: s.toWarehouseId?.name || s.toLabel || "—",
+          to: s.toWarehouseId?.name || sellerName || s.toLabel || "—",
+          seller: sellerName,
           itemName: summarizeList(lines.map((l) => l.productId?.productName)),
           lotNo: summarizeList(lines.map((l) => l.lotNumber || l.batchNumber)),
           status: s.status,
           total: goodsValue || s.freightCost || 0,
+          // Per-unit MRP of the product(s) in this shipment (first priced line).
+          mrp: lines.find((l) => l.productId?.mrp)?.productId?.mrp || 0,
           // Sum the shipment lines so the quantity column is meaningful (was 0).
           units: lines.reduce((n, l) => n + (l.qty || 0), 0),
           date: s.createdAt,

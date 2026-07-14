@@ -106,7 +106,7 @@ const OrderHistory = () => {
         <table className="w-full text-left border-collapse min-w-[980px] resp-table">
           <thead>
             <tr className="border-b border-stone-200">
-              {['Ref', 'Type', 'From', 'To', 'Item', 'Lot No.', 'Qty', 'Status', 'MRP', 'Date', ''].map((h, i) => (
+              {['Ref', 'Type', 'From', 'To (Seller Name)', 'Item', 'Lot No.', 'Qty', 'Status', 'MRP', 'Date', ''].map((h, i) => (
                 <th key={i} className="px-5 py-3.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h}</th>
               ))}
             </tr>
@@ -122,12 +122,17 @@ const OrderHistory = () => {
                   <td data-label="Ref" className="px-5 py-3.5 font-bold text-stone-800 text-sm">{r.ref}</td>
                   <td data-label="Type" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${KIND_STYLE[r.kind]}`}>{kindLabel(r)}</span></td>
                   <td data-label="From" className="px-5 py-3.5 text-sm text-stone-600">{r.from || '—'}</td>
-                  <td data-label="To" className="px-5 py-3.5 text-sm text-stone-600">{r.to || r.party || '—'}</td>
+                  <td data-label="To" className="px-5 py-3.5 text-sm text-stone-600">
+                    {r.to || r.party || '—'}
+                    {r.seller && r.seller !== r.to && (
+                      <span className="block text-[11px] text-stone-400">Seller: {r.seller}</span>
+                    )}
+                  </td>
                   <td data-label="Item" className="px-5 py-3.5 text-sm text-stone-600">{r.itemName || '—'}</td>
                   <td data-label="Lot No." className="px-5 py-3.5 text-sm text-stone-600">{r.lotNo || '—'}</td>
                   <td data-label="Qty" className="px-5 py-3.5 text-sm text-stone-600">{r.units || '—'}</td>
                   <td data-label="Status" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 capitalize ${STATUS_STYLE(r.status)}`}>{r.status}</span></td>
-                  <td data-label="Value" className="px-5 py-3.5 text-sm font-semibold text-stone-800">{r.total ? formatINR(r.total) : '—'}</td>
+                  <td data-label="MRP" className="px-5 py-3.5 text-sm font-semibold text-stone-800">{r.mrp ? formatINR(r.mrp) : '—'}</td>
                   <td data-label="Date" className="px-5 py-3.5 text-sm text-stone-500">{fmtDate(r.date)}</td>
                   <td className="px-5 py-3.5 text-right cell-actions">
                     <span className={`material-symbols-outlined text-stone-300 transition-transform ${expanded === r.id ? 'rotate-180' : ''}`}>expand_more</span>

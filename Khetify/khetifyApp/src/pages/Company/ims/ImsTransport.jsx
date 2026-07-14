@@ -103,42 +103,44 @@ const ShipmentsTab = () => {
         <PrimaryBtn onClick={() => setShowNew(true)}><span className="material-symbols-outlined text-base">local_shipping</span> New Shipment</PrimaryBtn>
       </div>
       <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
-        <table className="w-full text-left border-collapse min-w-[820px] resp-table">
-          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
+        <table className="w-full text-left border-collapse resp-table">
+          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th compact>To</Th><Th compact>Type</Th><Th compact>Vehicle</Th><Th compact>Driver</Th><Th compact>Phone</Th><Th compact>Status</Th><Th compact>Dispatched</Th><Th right compact>Actions</Th></tr></thead>
           <tbody className="divide-y divide-stone-100">
             {visible.map((s) => (
               <tr key={s._id} className="hover:bg-stone-50/40">
-                <td className="px-6 py-4 text-sm font-bold text-stone-900" data-label="To">{s.toLabel}</td>
-                <td className="px-6 py-4 text-xs text-stone-500" data-label="Type">{movementKind(s)}</td>
-                <td className="px-6 py-4 text-xs text-stone-500" data-label="Vehicle">{s.vehicleId?.regNo || s.vehicleNo || '—'}</td>
-                <td className="px-6 py-4" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[s.status] || 'bg-stone-100'}`}>{s.status}</span></td>
-                <td className="px-6 py-4 text-xs text-stone-500" data-label="Dispatched">{s.dispatchedAt ? fmtDate(s.dispatchedAt) : '—'}</td>
-                <td className="px-6 py-4 cell-actions">
-                  <div className="flex items-center justify-end gap-2">
+                <td className="px-3 py-3 text-sm font-bold text-stone-900" data-label="To">{s.toLabel}</td>
+                <td className="px-3 py-3 text-xs text-stone-500" data-label="Type">{movementKind(s)}</td>
+                <td className="px-3 py-3 text-xs text-stone-500" data-label="Vehicle">{s.vehicleId?.regNo || s.vehicleNo || '—'}</td>
+                <td className="px-3 py-3 text-xs text-stone-500" data-label="Driver">{s.driverId?.name || s.driverName || '—'}</td>
+                <td className="px-3 py-3 text-xs text-stone-500" data-label="Phone">{s.driverId?.phone || s.driverPhone || '—'}</td>
+                <td className="px-3 py-3" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[s.status] || 'bg-stone-100'}`}>{s.status}</span></td>
+                <td className="px-3 py-3 text-xs text-stone-500" data-label="Dispatched">{s.dispatchedAt ? fmtDate(s.dispatchedAt) : '—'}</td>
+                <td className="px-3 py-3 cell-actions">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
                     {/* Transfers skip the separate Approve step — Dispatch
                         accepts a planned shipment directly. Approve stays for
                         other shipment types. */}
-                    {s.refType !== 'Transfer' && ['draft', 'planned'].includes(s.status) && isMyOutgoing(s) && <GhostBtn onClick={() => doApprove(s)}>Approve</GhostBtn>}
-                    {['draft', 'planned', 'approved', 'loading'].includes(s.status) && isMyOutgoing(s) && (s.refType !== 'Transfer' || canTransfer) && <GhostBtn onClick={() => doDispatch(s)}>Dispatch</GhostBtn>}
+                    {s.refType !== 'Transfer' && ['draft', 'planned'].includes(s.status) && isMyOutgoing(s) && <GhostBtn sm onClick={() => doApprove(s)}>Approve</GhostBtn>}
+                    {['draft', 'planned', 'approved', 'loading'].includes(s.status) && isMyOutgoing(s) && (s.refType !== 'Transfer' || canTransfer) && <GhostBtn sm onClick={() => doDispatch(s)}>Dispatch</GhostBtn>}
                     {/* Sender can re-open the shipping label (QR + barcode) any
                         time after dispatch to print/share it. It is a SENDER-only
                         control: never shown on the destination's receivable row
                         (so it never appears alongside "Receive Lot"). */}
                     {s.qrToken && isMyOutgoing(s) && !isIncoming(s) && (
-                      <GhostBtn onClick={() => setManifestInfo({ qrPayload: `${s._id}.${s.qrToken}` })}>
-                        <span className="material-symbols-outlined text-sm">qr_code_2</span> Shipping Label
+                      <GhostBtn sm onClick={() => setManifestInfo({ qrPayload: `${s._id}.${s.qrToken}` })}>
+                        <span className="material-symbols-outlined text-sm">qr_code_2</span> Label
                       </GhostBtn>
                     )}
                     {/* Receive only renders for the DESTINATION warehouse's team
                         (the sender sees the row but cannot receive their own
                         outbound transfer — the backend enforces this too). */}
-                    {isIncoming(s) && <GhostBtn onClick={() => setVerify(s)}>Receive Lot</GhostBtn>}
-                    {['in_transit', 'arrived'].includes(s.status) && s.toType === 'customer' && <GhostBtn onClick={() => doDeliver(s)}>Deliver</GhostBtn>}
+                    {isIncoming(s) && <GhostBtn sm onClick={() => setVerify(s)}>Receive</GhostBtn>}
+                    {['in_transit', 'arrived'].includes(s.status) && s.toType === 'customer' && <GhostBtn sm onClick={() => doDeliver(s)}>Deliver</GhostBtn>}
                   </div>
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-stone-400">{view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-stone-400">{view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -190,15 +192,57 @@ const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
       {f.toType === 'warehouse' ? (
         <>
           <Field label="To warehouse *"><select className={inputCls} value={f.toWarehouseId} onChange={(e) => setF({ ...f, toWarehouseId: e.target.value })}><option value="">Select…</option>{(warehouseDir.length ? warehouseDir : warehouses).filter((w) => String(w._id) !== String(f.fromWarehouseId)).map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}</select></Field>
-          <p className="text-xs font-bold text-stone-500 mt-2">Lots to transfer</p>
-          {lines.map((l, i) => (
-            <div key={i} className="flex items-end gap-2">
-              <div className="flex-1"><select className={inputCls} value={l.inventoryId} onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, inventoryId: e.target.value } : x))}><option value="">Select lot…</option>{lots.map((lot) => <option key={lot._id} value={lot._id}>{(lot.productId?.productName || 'Item')} · {lot.lotNumber || lot.batchNumber} (avail {lot.availableStock})</option>)}</select></div>
-              <input type="number" min="1" placeholder="Qty" className={`${inputCls} w-24`} value={l.qty} onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, qty: e.target.value } : x))} />
-              {lines.length > 1 && <GhostBtn onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}>✕</GhostBtn>}
+          <div className="mt-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1.5">Lots to transfer</p>
+            <div className="space-y-2">
+              {lines.map((l, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {/* Width is controlled by the WRAPPERS, not the inputs: inputCls
+                      carries w-full, so putting w-24 on the input itself gets
+                      overridden and the lot select collapses. The select wrapper
+                      grows (flex-1 min-w-0); the Qty wrapper stays fixed (w-24). */}
+                  <div className="flex-1 min-w-0">
+                    <select
+                      className={inputCls}
+                      value={l.inventoryId}
+                      onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, inventoryId: e.target.value } : x))}
+                    >
+                      <option value="">Select lot…</option>
+                      {lots.map((lot) => (
+                        <option key={lot._id} value={lot._id}>
+                          {(lot.productId?.productName || 'Item')} · {lot.lotNumber || lot.batchNumber} (avail {lot.availableStock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-24 shrink-0">
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Qty"
+                      className={inputCls}
+                      value={l.qty}
+                      onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, qty: e.target.value } : x))}
+                    />
+                  </div>
+                  {lines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}
+                      className="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-[#EA2831] transition-colors"
+                      title="Remove lot"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-          <GhostBtn onClick={() => setLines((ls) => [...ls, { inventoryId: '', qty: '' }])}>+ Add lot</GhostBtn>
+            {lots.length === 0 && (
+              <p className="text-[11px] text-stone-400 mt-1.5">No lots available to transfer yet.</p>
+            )}
+            <GhostBtn className="mt-2" onClick={() => setLines((ls) => [...ls, { inventoryId: '', qty: '' }])}>+ Add lot</GhostBtn>
+          </div>
         </>
       ) : (
         <Field label="Destination label *"><input className={inputCls} value={f.toLabel} onChange={(e) => setF({ ...f, toLabel: e.target.value })} placeholder="Customer / address" /></Field>

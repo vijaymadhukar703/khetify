@@ -6,36 +6,57 @@ import CameraScanner, { cameraScanSupported } from './CameraScanner';
  * the code very fast and emit Enter. This component:
  *   - keeps focus so a scan is always captured
  *   - debounces manual typing vs. a scanner burst (a real scan arrives in one go)
- *   - fires onScan(code) on Enter (or on a fast burst terminator)
+ *   - fires onScan(code, { source }) on Enter (or on a fast burst terminator).
+ *     `source` is 'scan' for a barcode/QR (fast wedge burst or the camera) and
+ *     'manual' for human typing / paste / the optional Add button — so callers
+ *     can label an entry "Scanned" vs "Manually Added" while processing both the
+ *     same way. Existing callers that read only the first arg are unaffected.
  *   - offers DEVICE-CAMERA scanning (BarcodeDetector) where the browser
  *     supports it — a camera button opens a live preview overlay and feeds the
  *     decoded code through the same onScan path. Pass camera={false} to hide.
+ *   - optionally renders an "Add" button (showAdd) for touch/manual submit.
  *
- *   <ScanBox onScan={(code) => resolve(code)} placeholder="Scan a unit / bin / lot" />
+ *   <ScanBox onScan={(code, meta) => resolve(code, meta.source)} placeholder="…" />
  */
-const ScanBox = ({ onScan, onValueChange, placeholder = 'Scan or type a code, then Enter', autoFocus = true, disabled = false, camera = true }) => {
+// A wedge scanner types the whole code in a single fast burst; a human types far
+// slower. Under this many ms/char (averaged over the burst) we treat it as a scan.
+const SCAN_MS_PER_CHAR = 40;
+
+const ScanBox = ({ onScan, onValueChange, placeholder = 'Scan or type a code, then Enter', autoFocus = true, disabled = false, camera = true, showAdd = false }) => {
   const [value, setValue] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const ref = useRef(null);
-  const lastKey = useRef(0);
+  const firstKeyTs = useRef(0); // timestamp of the first char keystroke of the burst
+  const keyCount = useRef(0);   // char keystrokes since the field was last cleared
 
   useEffect(() => {
     if (autoFocus && ref.current) ref.current.focus();
   }, [autoFocus]);
 
-  const submit = (code) => {
+  // source: 'scan' (barcode/QR) or 'manual' (typed / pasted / Add button).
+  const submit = (code, source = 'manual') => {
     const c = String(code || '').trim();
     if (!c) return;
-    onScan?.(c);
+    onScan?.(c, { source });
     setValue('');
+    firstKeyTs.current = 0;
+    keyCount.current = 0;
   };
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      submit(value);
+      // Classify a wedge-scanner burst vs. human typing by average keystroke speed.
+      const n = keyCount.current;
+      const dur = firstKeyTs.current ? e.timeStamp - firstKeyTs.current : Infinity;
+      const source = n >= 3 && dur / n < SCAN_MS_PER_CHAR ? 'scan' : 'manual';
+      submit(value, source);
+      return;
     }
-    lastKey.current = e.timeStamp;
+    if (e.key.length === 1) {
+      if (keyCount.current === 0) firstKeyTs.current = e.timeStamp;
+      keyCount.current += 1;
+    }
   };
 
   return (
@@ -68,6 +89,17 @@ const ScanBox = ({ onScan, onValueChange, placeholder = 'Scan or type a code, th
         className="flex-1 border border-stone-200 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#EA2831] focus:ring-1 focus:ring-[#EA2831] outline-none"
         autoComplete="off"
       />
+      {showAdd && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => submit(value, 'manual')}
+          title="Add serial number"
+          className="px-3 py-2 rounded-lg border border-stone-200 text-stone-600 text-sm font-bold hover:text-[#EA2831] hover:border-[#EA2831] transition-colors"
+        >
+          Add
+        </button>
+      )}
       {camera && cameraScanSupported() && (
         <button
           type="button"
@@ -82,7 +114,7 @@ const ScanBox = ({ onScan, onValueChange, placeholder = 'Scan or type a code, th
       {showCamera && (
         <CameraScanner
           onClose={() => setShowCamera(false)}
-          onDetected={(code) => { setShowCamera(false); submit(code); }}
+          onDetected={(code) => { setShowCamera(false); submit(code, 'scan'); }}
         />
       )}
     </div>
