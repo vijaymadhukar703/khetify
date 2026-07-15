@@ -10,10 +10,17 @@ import { disconnectSocket } from '../lib/socket';
 import { getCompany } from '../lib/imsApi';
 import SupportChatWidget from './support/SupportChatWidget';
 
-// Company breadcrumb: resolve the active module for the current path.
-const resolveCompanyCrumb = (pathname) => {
+// Company-only label overrides. The MAIN company (company_admin) sees the
+// Order History module labelled "Transfer History" in the sidebar + breadcrumb;
+// every other role keeps the shared nav title untouched. Keyed by module `key`.
+const companyLabel = (m, isMainCompany) =>
+  isMainCompany && m.key === 'order-history' ? 'Transfer History' : m.title;
+
+// Company breadcrumb: resolve the active module for the current path, applying
+// the company-only label override.
+const resolveCompanyCrumb = (isMainCompany) => (pathname) => {
   const m = activeModule(pathname);
-  return m ? { icon: m.icon, title: m.title } : null;
+  return m ? { icon: m.icon, title: companyLabel(m, isMainCompany) } : null;
 };
 
 // Shell: a slim full-width TopNav over a collapsible left Sidebar + page
@@ -27,7 +34,8 @@ const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const { has, plan, loading: subLoading } = useSubscription();
-  const { can, loading: permLoading } = usePermission();
+  const { can, role, loading: permLoading } = usePermission();
+  const isMainCompany = role === 'company_admin';
 
   // The company must be approved before the module sidebar is usable. Until then
   // we hide the Sidebar entirely and let the page (Hub) show its under-review
@@ -60,7 +68,7 @@ const DashboardLayout = () => {
   const entries = [
     { to: '/hub', icon: 'home', title: 'Home', end: true },
     ...MODULES.filter(visible).map((m) => ({
-      to: m.path, icon: m.icon, title: m.title, isLocked: locked(m), lockTitle: 'Upgrade to unlock',
+      to: m.path, icon: m.icon, title: companyLabel(m, isMainCompany), isLocked: locked(m), lockTitle: 'Upgrade to unlock',
     })),
     // Help resources — always available, no gating.
     { to: '/faq', icon: 'quiz', title: 'FAQ' },
@@ -95,7 +103,7 @@ const DashboardLayout = () => {
         onMenuClick={() => setMobileOpen(true)}
         brand={{ label: 'Khetify' }}
         homePath="/hub"
-        resolveCrumb={resolveCompanyCrumb}
+        resolveCrumb={resolveCompanyCrumb(isMainCompany)}
         Bell={NotificationBell}
         profile={profile}
       />
