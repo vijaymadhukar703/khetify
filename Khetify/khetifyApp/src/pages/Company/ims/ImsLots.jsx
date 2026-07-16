@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import {
   getLots, receiveLot, createTmsShipment, dispatchShipment, getWarehouses, getWarehouseDirectory, getProducts,
   generateUnits, getUnits, markUnitsPrinted,
+  getIncomingLot, confirmLotReceipt,
   daysToExpiry, expiryBadge, fmtDate,
 } from '../../../lib/imsApi';
 import { STATUS, statusOf, computeInventorySummary, formatINR } from '../../../lib/inventoryData';
@@ -22,7 +23,19 @@ const apiError = (err) =>
 
 /** Stock status of a lot from quantity vs reorder level — the single rule used
  *  by the Company summary cards, stock filter and table. */
-const stockStatusOf = (l) => statusOf({ stock: l.availableStock || 0, reorderLevel: l.lowStockThreshold || 0 });
+/**
+ * The lot's CREATED quantity = what's on the books here + what is booked to this
+ * warehouse but still awaiting its Receive confirmation (inTransitStock).
+ *
+ * A Company → Company Warehouse lot starts fully in-transit (availableStock 0),
+ * so reading availableStock alone would report the Company's own 100-unit lot as
+ * 0/Out of Stock. This does NOT make pending stock available to the warehouse:
+ * a warehouse-scoped caller never receives purely-pending rows (getLots
+ * excludePending), and once received the qty has moved into availableStock with
+ * inTransitStock back to 0 — so this reads identically for them.
+ */
+const lotQty = (l) => Number(l.availableStock || 0) + Number(l.inTransitStock || 0);
+const stockStatusOf = (l) => statusOf({ stock: lotQty(l), reorderLevel: l.lowStockThreshold || 0 });
 
 const PAGE_SIZE = 10; // Company Lots pagination — lots per page
 
@@ -43,10 +56,17 @@ const PAGE_SIZE = 10; // Company Lots pagination — lots per page
  *   fluid           — widen the page: drop the max-w-7xl cap + reduce inner padding.
  *   requireWarehouse— Create/Receive Lot: make Warehouse mandatory (Unassigned
  *                     shown but disabled). Company + Company Warehouse only.
+ *   hideCreate      — hide the Create Lot button (Receive Lot is kept). Company
+ *                     Warehouse only: a warehouse receives stock, it never mints
+ *                     a new lot — that stays with the main Company.
+ *   receiveTransfer — Company Warehouse only: "Receive Lot" scans an incoming
+ *                     PARENT LOT and confirms the transfer (stock arrives here)
+ *                     instead of stocking in a brand-new lot.
  */
 const ImsLots = ({
   showSummary = false, showStockStatus = false, hideReceive = false,
   paginate = false, showBatchNo = false, fluid = false, requireWarehouse = false,
+  hideCreate = false, receiveTransfer = false,
 } = {}) => {
   const navigate = useNavigate();
   const [lots, setLots] = useState([]);
@@ -93,7 +113,7 @@ const ImsLots = ({
         const p = l.productId || {};
         return {
           id: l._id,
-          stock: l.availableStock || 0,
+          stock: lotQty(l),
           reorderLevel: l.lowStockThreshold || 0,
           price: p.mrp || 0,
         };
@@ -166,14 +186,18 @@ const ImsLots = ({
           </div>
           {/* Create + Receive — both available to admin AND operations manager
               (anyone holding lot:receive). Create = manual lot; Receive = scan.
-              hideReceive (Company) hides Receive Lot only; Create Lot is kept. */}
+              hideReceive (main Company) hides Receive Lot only; hideCreate
+              (Company Warehouse) hides Create Lot only. Neither is removed for
+              any other role, and the underlying modal/API are untouched. */}
           <Can capability="lot:receive">
             <div className="flex gap-2">
-              <GhostBtn onClick={() => setModal({ type: 'create' })}>
-                <span className="material-symbols-outlined text-base">add_box</span> Create Lot
-              </GhostBtn>
+              {!hideCreate && (
+                <GhostBtn onClick={() => setModal({ type: 'create' })}>
+                  <span className="material-symbols-outlined text-base">add_box</span> Create Lot
+                </GhostBtn>
+              )}
               {!hideReceive && (
-                <PrimaryBtn onClick={() => setModal({ type: 'receive' })}>
+                <PrimaryBtn onClick={() => setModal({ type: receiveTransfer ? 'receive-transfer' : 'receive' })}>
                   <span className="material-symbols-outlined text-base">qr_code_scanner</span> Receive Lot
                 </PrimaryBtn>
               )}
@@ -230,7 +254,16 @@ const ImsLots = ({
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Warehouse">{lot.warehouseId?.name || 'Unassigned'}</td>
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Mfg">{fmtDate(lot.mfgDate)}</td>
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Expiry">{fmtDate(lot.expiryDate)}</td>
-                      <td className="px-6 py-5 text-sm text-stone-900 font-bold" data-label="Qty">{lot.availableStock.toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-5 text-sm text-stone-900 font-bold" data-label="Qty">
+                        {lotQty(lot).toLocaleString('en-IN')}
+                        {/* Only ever set on a lot the destination warehouse hasn't
+                            confirmed yet — a warehouse never sees these rows. */}
+                        {lot.inTransitStock > 0 && (
+                          <span className="block text-[10px] font-bold text-amber-600 uppercase tracking-wide">
+                            Awaiting receipt
+                          </span>
+                        )}
+                      </td>
                       {showStockStatus && (
                         <td className="px-6 py-5" data-label="Stock Status">
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${stockCls}`}>{stock}</span>
@@ -306,6 +339,9 @@ const ImsLots = ({
           showBatchNo={showBatchNo} requireWarehouse={requireWarehouse}
           onClose={() => setModal(null)} onDone={() => { setModal(null); refresh(); }} />
       )}
+      {modal?.type === 'receive-transfer' && (
+        <ReceiveTransferModal onClose={() => setModal(null)} onDone={() => { setModal(null); refresh(); }} />
+      )}
       {modal?.type === 'transfer' && (
         <TransferModal lot={modal.lot} warehouses={warehouseDir.length ? warehouseDir : warehouses}
           onClose={() => setModal(null)} onDone={() => { setModal(null); refresh(); }} />
@@ -315,6 +351,83 @@ const ImsLots = ({
 };
 
 /* ---------- modals ---------- */
+
+const Detail = ({ label, value }) => (
+  <div className="min-w-0">
+    <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{label}</p>
+    <p className="text-sm text-stone-800 font-medium break-words">{value == null || value === '' ? '—' : value}</p>
+  </div>
+);
+
+/**
+ * RECEIVE LOT (Company Warehouse) — scan an incoming PARENT LOT booked to THIS
+ * warehouse and confirm it onto the books.
+ *
+ * The scan only LOOKS UP the pending lot (read-only, EXACT lot match — trim +
+ * uppercase only). Nothing moves on lot creation, on opening this modal, or on
+ * a successful scan. The quantity lands solely in
+ * POST /lots/:id/confirm-receipt (lotService.confirmLotReceipt) — one atomic
+ * operation that also activates the lot's already-generated child units.
+ * Confirm Receive stays disabled until an exact lot is verified, and a repeat
+ * confirm is rejected ("already received"), so qty can never be added twice.
+ */
+const ReceiveTransferModal = ({ onClose, onDone }) => {
+  const [found, setFound] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const onScan = async (raw) => {
+    // Safe normalisation only: trim + uppercase. The backend matches EXACTLY.
+    const lot = String(raw || '').trim().toUpperCase();
+    if (!lot) return;
+    setFound(null);
+    try {
+      const r = await getIncomingLot(lot);
+      setFound(r?.data || null);
+    } catch (err) { apiError(err); }
+  };
+
+  const confirm = async () => {
+    if (!found || busy) return;
+    setBusy(true);
+    try {
+      await confirmLotReceipt(found.inventoryId);
+      toast('success', 'Received into your warehouse');
+      onDone();
+    } catch (err) { apiError(err); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title="Receive Lot" onClose={onClose} wide>
+      <div className="mb-4 bg-stone-50 border border-stone-200 rounded-xl p-4">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-2">Scan the lot or product barcode</p>
+        <ScanBox onScan={onScan} placeholder="Scan or type the parent lot number, then Enter" />
+        <p className="text-[11px] text-stone-400 mt-2">
+          Scan the incoming parent lot (e.g. KH-KGN-202607-0001). Nothing is added to your stock until you press Confirm Receive.
+        </p>
+      </div>
+
+      {found && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 border border-stone-200 rounded-xl p-3">
+            <Detail label="Parent Lot No." value={found.lotNumber} />
+            <Detail label="Product" value={found.productName} />
+            <Detail label="Batch No." value={found.mfgBatchNo} />
+            <Detail label="Destination Warehouse" value={found.destination} />
+            <Detail label="Transfer Quantity" value={Number(found.qty || 0).toLocaleString('en-IN')} />
+            <Detail label="Current Status" value={String(found.status || '').replace(/_/g, ' ')} />
+            <Detail label="Manufacturing Date" value={fmtDate(found.mfgDate)} />
+            <Detail label="Expiry Date" value={fmtDate(found.expiryDate)} />
+          </div>
+
+          <PrimaryBtn disabled={busy} onClick={confirm}>
+            <span className="material-symbols-outlined text-base">inventory</span>
+            {busy ? 'Receiving…' : 'Confirm Receive'}
+          </PrimaryBtn>
+        </div>
+      )}
+    </Modal>
+  );
+};
 
 const ReceiveLotModal = ({ products, warehouses, lots = [], scanFirst = false, showBatchNo = false, requireWarehouse = false, onClose, onDone }) => {
   const [f, setF] = useState({
@@ -607,7 +720,9 @@ const UNIT_LAYOUT = { cols: 5, w: 38, h: 21 }; // mirrors the ImsLabels "65/page
  * same Barcode128 unit layout as the Labels page.
  */
 const CreatedLotSuccess = ({ lot, onDone }) => {
-  const [qty, setQty] = useState(String(lot.availableStock || ''));
+  // Prefill from the CREATED quantity — a lot sent to a warehouse for receipt
+  // sits in inTransitStock, so availableStock alone would prefill 0.
+  const [qty, setQty] = useState(String(lotQty(lot) || ''));
   const [units, setUnits] = useState([]);
   const [busy, setBusy] = useState(false);
   const code = lot.lotNumber || lot.batchNumber || '';
@@ -626,7 +741,7 @@ const CreatedLotSuccess = ({ lot, onDone }) => {
 
   const print = async () => {
     window.print();
-    const serials = units.filter((x) => x.status === 'generated').map((x) => x.serial);
+    const serials = units.filter((x) => !x.printed).map((x) => x.serial);
     if (serials.length) { try { await markUnitsPrinted(serials); } catch { /* best-effort */ } }
   };
 
@@ -651,7 +766,10 @@ const CreatedLotSuccess = ({ lot, onDone }) => {
       </div>
 
       <div className="no-print mt-4 space-y-3">
-        <p className="text-sm text-stone-500">Lot <b className="font-mono">{code}</b> created with {lot.availableStock} unit(s) in stock.</p>
+        <p className="text-sm text-stone-500">
+          Lot <b className="font-mono">{code}</b> created with {lotQty(lot)} unit(s).
+          {lot.inTransitStock > 0 && ' Awaiting the warehouse’s Receive confirmation.'}
+        </p>
         <div className="flex flex-wrap items-end gap-2">
           <Field label="Unit barcodes to generate">
             <input

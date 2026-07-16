@@ -389,7 +389,7 @@ const CompanyUploadProduct = () => {
           </section>
 
           {/* Status Toggle */}
-          <section className="flex items-center justify-between py-6 border-t border-stone-100">
+          {/* <section className="flex items-center justify-between py-6 border-t border-stone-100">
             <div><h3 className="font-bold text-stone-900">Product Status</h3><p className="text-sm text-stone-500">Active products appear in the catalog.</p></div>
             <div className="flex items-center gap-3">
               <span className={`text-[11px] font-black tracking-widest ${formData.isActive ? 'text-[#EA2831]' : 'text-stone-400'}`}>{formData.isActive ? 'ACTIVE' : 'INACTIVE'}</span>
@@ -398,7 +398,7 @@ const CompanyUploadProduct = () => {
                 <div className="w-11 h-6 bg-stone-200 rounded-full peer peer-checked:bg-[#EA2831] after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
               </label>
             </div>
-          </section>
+          </section> */}
 
           {/* Buttons */}
           <div className="flex justify-end gap-4 border-t border-stone-100 pt-8">

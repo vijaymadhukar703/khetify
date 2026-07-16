@@ -96,15 +96,15 @@ const CompanySupport = () => {
         {/* Header - Text alignment mobile par center ho sakti hai agar aap chahein */}
         <div className="mb-8 sm:mb-10">
           <h3 className="text-2xl sm:text-3xl font-bold text-stone-900">Support Center</h3>
-          <p className="text-stone-500 mt-2 text-sm sm:text-base max-w-2xl leading-relaxed">
+          {/* <p className="text-stone-500 mt-2 text-sm sm:text-base max-w-2xl leading-relaxed">
             Get assistance with your company account, product listings, or platform guidelines.
-          </p>
+          </p> */}
         </div>
 
         {/* Top Cards Grid - Mobile par 1 column, Tablets par 2, Desktop par 3 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-12">
           {/* Raise Request */}
-          <div className="p-6 border border-stone-200 rounded-2xl flex flex-col h-full bg-white hover:border-red-100 transition-all shadow-sm">
+          {/* <div className="p-6 border border-stone-200 rounded-2xl flex flex-col h-full bg-white hover:border-red-100 transition-all shadow-sm">
             <h4 className="text-lg font-bold text-stone-900 mb-3">Raise a Request</h4>
             <p className="text-sm text-stone-500 mb-6 flex-grow leading-relaxed">Submit a formal ticket for technical issues, account changes, or billing inquiries.</p>
             <button
@@ -113,10 +113,10 @@ const CompanySupport = () => {
             >
               Create Support Request
             </button>
-          </div>
+          </div> */}
 
           {/* Guidelines */}
-          <div className="p-6 border border-stone-200 rounded-2xl flex flex-col h-full bg-white hover:border-red-100 transition-all shadow-sm">
+          {/* <div className="p-6 border border-stone-200 rounded-2xl flex flex-col h-full bg-white hover:border-red-100 transition-all shadow-sm">
             <h4 className="text-lg font-bold text-stone-900 mb-4">Help & Guidelines</h4>
             <div className="flex flex-col gap-3.5">
               {['Product upload guidelines', 'Vendor policies', 'Returns and issue handling', 'Platform rules'].map((item) => (
@@ -126,7 +126,7 @@ const CompanySupport = () => {
                 </a>
               ))}
             </div>
-          </div>
+          </div> */}
 
           {/* Contact Details - Tablet par full width le lega agar odd number ho */}
           <div className="p-6 border border-stone-200 rounded-2xl flex flex-col h-full bg-white hover:border-red-100 transition-all shadow-sm md:col-span-2 lg:col-span-1">
@@ -149,20 +149,19 @@ const CompanySupport = () => {
 
         {/* Requests Table Section */}
         <div className="mb-12">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          {/* <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <h4 className="text-xl font-bold text-stone-900">Your Requests</h4>
             <div className="text-xs font-bold text-stone-400 uppercase tracking-wider bg-stone-50 px-3 py-1 rounded-full">
               {loading ? 'Loading…' : `Showing ${tickets.length} ticket${tickets.length === 1 ? '' : 's'}`}
             </div>
-          </div>
+          </div> */}
 
-          {!loading && tickets.length === 0 ? (
+          {/* {!loading && tickets.length === 0 ? (
             <div className="border border-dashed border-stone-200 rounded-2xl p-10 text-center text-stone-400 text-sm">
               No support requests yet. Click “Create Support Request” to raise one.
             </div>
           ) : (
             <>
-              {/* Desktop Table - Hidden on mobile, Flex on desktop */}
               <div className="hidden md:block border border-stone-200 rounded-2xl overflow-hidden bg-white shadow-sm">
                 <table className="w-full text-left">
                   <thead>
@@ -196,7 +195,6 @@ const CompanySupport = () => {
                 </table>
               </div>
 
-              {/* Mobile Layout - Cards instead of table */}
               <div className="md:hidden space-y-4">
                 {tickets.map((ticket) => (
                   <div key={ticket._id} className="p-5 border border-stone-200 rounded-2xl bg-white shadow-sm active:bg-stone-50 transition-colors">
@@ -231,7 +229,7 @@ const CompanySupport = () => {
                 ))}
               </div>
             </>
-          )}
+          )} */}
         </div>
 
       </div>

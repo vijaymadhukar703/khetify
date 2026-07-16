@@ -156,7 +156,8 @@ const CompanyUsers = () => {
 };
 
 const AddUserModal = ({ onClose, onDone }) => {
-  const [f, setF] = useState({ name: '', email: '', phone: '', role: 'operations_manager', password: '', warehouseId: '' });
+  // Role + warehouse start empty so the operator must actively pick both.
+  const [f, setF] = useState({ name: '', email: '', phone: '', role: '', password: '', warehouseId: '' });
   const [warehouses, setWarehouses] = useState([]);
   const [phoneErr, setPhoneErr] = useState('');
   useEffect(() => {
@@ -200,15 +201,21 @@ const AddUserModal = ({ onClose, onDone }) => {
         />
         {phoneErr && <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {phoneErr}</p>}
       </Field>
-      <Field label="Role">
-        <select className={inputCls} value={f.role} onChange={u('role')}>
-          {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+      {/* Dropdown stays ENABLED — Operations Manager is simply the only role a
+          new member can be given, so no other role can be submitted from this
+          form. (An existing member's role can still be changed from the table.) */}
+      <Field label="Role *">
+        <select className={inputCls} value={f.role} onChange={u('role')} required>
+          <option value="" disabled>Select role</option>
+          <option value="operations_manager">Operations Manager</option>
         </select>
       </Field>
       {f.role === 'operations_manager' && (
-        <Field label="Assigned Warehouse">
-          <select className={inputCls} value={f.warehouseId} onChange={u('warehouseId')}>
-            <option value="">All warehouses (unassigned)</option>
+        <Field label="Assigned Warehouse *">
+          {/* "All warehouses (unassigned)" is no longer selectable — a warehouse
+              must be chosen, so the blank option is a disabled placeholder. */}
+          <select className={inputCls} value={f.warehouseId} onChange={u('warehouseId')} required>
+            <option value="" disabled>Select warehouse</option>
             {warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
           </select>
         </Field>
@@ -216,7 +223,9 @@ const AddUserModal = ({ onClose, onDone }) => {
       <Field label="Temp Password (optional)">
         <input className={inputCls} value={f.password} onChange={u('password')} placeholder="Leave blank to invite" />
       </Field>
-      <PrimaryBtn disabled={!f.name} onClick={submit}>
+      {/* Name + Role are required; a warehouse must be picked when the company
+          actually has warehouses to choose from. */}
+      <PrimaryBtn disabled={!f.name || !f.role || (warehouses.length > 0 && !f.warehouseId)} onClick={submit}>
         <span className="material-symbols-outlined text-base">person_add</span> Add Member
       </PrimaryBtn>
     </Modal>

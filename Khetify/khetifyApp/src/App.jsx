@@ -56,6 +56,9 @@ import CompanySettings from './pages/Company/CompanySettings';
 import CompanyProfile from './pages/Company/CompanyProfile';
 import CompanySellers from './pages/Company/CompanySellers';
 import CompanySupplyRequests from './pages/Company/CompanySupplyRequests';
+import SupplyRequestDetail from './pages/Company/SupplyRequestDetail';
+import WarehouseTransferHistory from './pages/Company/WarehouseTransferHistory';
+import WarehouseTransferDetail from './pages/Company/WarehouseTransferDetail';
 import CompanyPcApplications from './pages/Company/CompanyPcApplications';
 
 // New card-based navigation + merged modules
@@ -181,6 +184,9 @@ function App() {
           {/* Orders + dedicated Order History */}
           <Route path="/orders" element={<RequireCap capability="order:read"><CompanyOrders /></RequireCap>} />
           <Route path="/order-history" element={<RequireCap capability="order:read"><OrderHistory /></RequireCap>} />
+          {/* Company Warehouse only — its own, warehouse-scoped transfer history. */}
+          <Route path="/warehouse/transfer-history" element={<RequireCap capability="shipment:read"><WarehouseTransferHistory /></RequireCap>} />
+          <Route path="/warehouse/transfer-history/:id" element={<RequireCap capability="shipment:read"><WarehouseTransferDetail /></RequireCap>} />
 
           {/* Analytics (folds in the old executive widgets) */}
           <Route path="/analytics" element={<RequireCap capability="report:read" ims><ImsAnalytics /></RequireCap>} />
@@ -202,6 +208,8 @@ function App() {
           <Route path="/vendors" element={<Navigate to="/sellers" replace />} />
           <Route path="/sellers" element={<RequireCap capability="inventory:read"><CompanySellers /></RequireCap>} />
           <Route path="/supply-requests" element={<RequireCap capability="inventory:read"><CompanySupplyRequests /></RequireCap>} />
+          {/* Read-only traceability for one request: parent lots + the exact child serials picked. */}
+          <Route path="/supply-requests/:id" element={<RequireCap capability="inventory:read"><SupplyRequestDetail /></RequireCap>} />
           <Route path="/pc-applications" element={<RequireCap capability="inventory:read"><CompanyPcApplications /></RequireCap>} />
           <Route path="/returns" element={<CompanyReturns />} />
           <Route path="/support" element={<CompanySupport />} />

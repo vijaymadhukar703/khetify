@@ -2,12 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import {
-  getLots, getUnits, generateUnits, markUnitsPrinted, scanCode, recallLot,
+  getLots, getUnits, generateUnits, markUnitsPrinted, recallLot,
 } from '../../../lib/imsApi';
 import { Field, inputCls, PrimaryBtn, GhostBtn, Modal } from './ImsUi';
 import Barcode128 from '../../../lib/barcode128';
 import LotLabel from '../../../Components/ims/LotLabel';
-import ScanBox from '../../../Components/ims/ScanBox';
 import { usePermission } from '../../../context/PermissionContext';
 
 const toast = (icon, title) =>
@@ -40,7 +39,6 @@ const ImsLabels = () => {
   const [layout, setLayout] = useState('65');
   // Manual label size (used when layout === 'custom'): columns per row + mm.
   const [custom, setCustom] = useState({ cols: 4, w: 50, h: 30 });
-  const [scanResult, setScanResult] = useState(null);
   const [recallOpen, setRecallOpen] = useState(false);
   // Print scope: 'unprinted' (default) prints only not-yet-printed units so a
   // second print continues from where you left off; 'all' reprints everything.
@@ -83,13 +81,9 @@ const ImsLabels = () => {
 
   const print = async () => {
     window.print();
-    // best-effort mark printed
-    const serials = units.filter((u) => u.status === 'generated').map((u) => u.serial);
+    // best-effort mark printed — the not-yet-printed units on the sheet.
+    const serials = units.filter((u) => !u.printed).map((u) => u.serial);
     if (serials.length) { try { await markUnitsPrinted(serials); loadUnits(); } catch { /* ignore */ } }
-  };
-
-  const doScan = async (code) => {
-    try { const r = await scanCode(code); setScanResult(r?.data); } catch (err) { apiError(err); setScanResult(null); }
   };
 
   // Resolve the active grid config. 'custom' reads the manual inputs (clamped to
@@ -107,7 +101,11 @@ const ImsLabels = () => {
   // You can't label more units than the lot holds: cap generation at the lot's
   // available stock, minus what's already been labelled. The backend enforces
   // the same rule (barcodeService.generateUnits) — this is just the UX guard.
-  const remaining = lot ? Math.max(0, Number(lot.availableStock || 0) - units.length) : 0;
+  // Cap against the lot's CREATED quantity — a lot still awaiting its warehouse
+  // Receive holds its qty in inTransitStock, so availableStock alone would read
+  // 0 and block labelling. Mirrors barcodeService.generateUnits' server-side cap.
+  const lotQty = (l) => Number(l?.availableStock || 0) + Number(l?.inTransitStock || 0);
+  const remaining = lot ? Math.max(0, lotQty(lot) - units.length) : 0;
   const qtyNum = Number(qty) || 0;
   const overCap = !!lot && qtyNum > remaining;
   const canGenerate = !!lotId && qtyNum >= 1 && !overCap && remaining > 0;
@@ -120,7 +118,7 @@ const ImsLabels = () => {
   // (so it continues from the next number); in 'all' scope every unit (reprint),
   // optionally narrowed to a fromU..toU range. Always in TRUE numeric order.
   const visibleUnits = useMemo(() => {
-    const base = scope === 'unprinted' ? units.filter((u) => u.status === 'generated') : units;
+    const base = scope === 'unprinted' ? units.filter((u) => !u.printed) : units;
     let list = [...base].sort((a, b) => seqNum(a.serial) - seqNum(b.serial));
     if (scope === 'all' && (fromU !== '' || toU !== '')) {
       const lo = fromU !== '' ? Number(fromU) : -Infinity;
@@ -138,25 +136,6 @@ const ImsLabels = () => {
     <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white font-sora">
       <style>{PRINT_CSS}</style>
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Scan panel */}
-        <div className="no-print border border-stone-200 rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-bold text-stone-500 mb-2">Scan a unit / bin / lot</p>
-          <ScanBox onScan={doScan} />
-          {scanResult && (
-            <div className="mt-3 text-sm bg-stone-50 rounded-lg p-3">
-              <span className="font-bold uppercase text-[10px] tracking-wide text-stone-400 mr-2">{scanResult.type}</span>
-              {scanResult.type === 'unit' && (
-                <span>{scanResult.unit.serial} · <b>{scanResult.unit.status}</b> · {scanResult.unit.productId?.productName}</span>
-              )}
-              {scanResult.type === 'location' && <span className="font-mono">{scanResult.location.fullCode}</span>}
-              {scanResult.type === 'lot' && <span>{scanResult.lot} · {scanResult.rows?.length} row(s)</span>}
-              {scanResult.nextActions?.length > 0 && (
-                <span className="ml-2 text-xs text-stone-400">→ {scanResult.nextActions.join(', ')}</span>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* Controls */}
         <div className="no-print border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex flex-wrap items-end gap-3">
@@ -202,7 +181,7 @@ const ImsLabels = () => {
           {/* Inventory cap: never label more units than the lot holds. */}
           {lot && (
             <p className={`text-[11px] ${overCap ? 'text-[#EA2831] font-semibold' : 'text-stone-400'}`}>
-              {units.length.toLocaleString('en-IN')} of {Number(lot.availableStock || 0).toLocaleString('en-IN')} unit(s) in this lot already labelled —{' '}
+              {units.length.toLocaleString('en-IN')} of {lotQty(lot).toLocaleString('en-IN')} unit(s) in this lot already labelled —{' '}
               {remaining > 0
                 ? <>you can generate up to <b>{remaining.toLocaleString('en-IN')}</b> more.{overCap && ' Reduce the quantity.'}</>
                 : 'every unit in this lot is already labelled.'}

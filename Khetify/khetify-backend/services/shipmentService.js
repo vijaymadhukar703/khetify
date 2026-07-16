@@ -271,6 +271,29 @@ async function dispatchShipment(ownerArg, shipmentId, { performedBy, lat, lng } 
           );
           if (!inv) throw httpErr(`Insufficient stock to dispatch lot ${line.lotNumber}`, 409);
           await StockMovement.create([{ inventoryId: inv._id, productId: inv.productId, ownerType: srcOwnerType, ownerId: srcOwnerId, type: "in_transit_out", channel: "internal", quantity: -line.qty, balanceAfter: inv.availableStock, refType: "Transfer", refId: shipment._id, performedBy, note: `In-transit out (shipment ${shipment._id})` }], { session });
+
+          // Child units FOLLOW THEIR PARENT LOT: the labeled units of this lot go
+          // in-transit with the goods (mirrors the supply branch above), so they
+          // stop being pickable at the source the moment the stock leaves, and
+          // verifyReceipt can land them in the destination warehouse.
+          // No-op when the lot has no child units (non-serialized stock is
+          // completely unaffected). Creates/deletes nothing; serial, lotNumber,
+          // productId and printed status are untouched.
+          const units = await UnitSerial.find({
+            ownerType: srcOwnerType, ownerId: srcOwnerId, inventoryId: line.inventoryId,
+            status: { $in: ["packed", "picked", "in_stock"] },
+          }).limit(line.qty).session(session);
+          if (units.length) {
+            await UnitSerial.updateMany(
+              { _id: { $in: units.map((u) => u._id) } },
+              { $set: { status: "shipped", currentShipmentId: shipment._id } },
+              { session }
+            );
+            await UnitEvent.insertMany(
+              units.map((u) => ({ companyId: u.companyId, serial: u.serial, event: "in_transit", fromStatus: u.status, toStatus: "shipped", refType: "Shipment", refId: shipment._id, actorId: performedBy })),
+              { session }
+            );
+          }
         }
       }
     }
@@ -485,12 +508,57 @@ async function verifyReceipt(ownerArg, shipmentId, { verifierId, qr, warehouseId
         );
         await StockMovement.create([{ inventoryId: landLot._id, productId: line.productId, ownerType: "seller", ownerId: landOwnerId, type: "in_transit_in", channel: "internal", quantity: recvQty, balanceAfter: landLot.availableStock, refType: "Transfer", refId: shipment._id, performedBy, note: `Transfer in (shipment ${shipment._id})` }], { session });
       } else if (recvQty > 0) {
+        // Carry the source lot's IMMUTABLE metadata onto the destination row.
+        // A warehouse→warehouse transfer moves quantity + location only — it must
+        // never lose the lot identity the Company entered once at creation.
+        // $setOnInsert (not $set) so a merge into an existing destination row
+        // never overwrites metadata that is already there.
+        // NB: product-level attributes (MRP, SKU, category, brand, packing) are
+        // NOT copied — they live on the Product and are resolved through
+        // productId, so the destination row inherits them automatically.
+        const srcLot = await Inventory.findById(line.inventoryId).select("expiryDate mfgDate mfgBatchNo").session(session);
         const inv = await Inventory.findOneAndUpdate(
           { productId: line.productId, ownerType: "company", ownerId: companyId, warehouseId: shipment.toWarehouseId, batchNumber: line.batchNumber },
-          { $inc: { offlineStock: recvQty, availableStock: recvQty }, $set: { lotNumber: line.lotNumber } },
+          {
+            $inc: { offlineStock: recvQty, availableStock: recvQty },
+            $set: { lotNumber: line.lotNumber },
+            $setOnInsert: {
+              expiryDate: srcLot?.expiryDate || null,
+              mfgDate: srcLot?.mfgDate || null,
+              mfgBatchNo: srcLot?.mfgBatchNo || null,
+            },
+          },
           { new: true, upsert: true, session }
         );
         await StockMovement.create([{ inventoryId: inv._id, productId: line.productId, ownerType: "company", ownerId: companyId, type: "in_transit_in", channel: "internal", quantity: recvQty, balanceAfter: inv.availableStock, refType: "Transfer", refId: shipment._id, performedBy, note: `In-transit in (shipment ${shipment._id})` }], { session });
+
+        // Child units FOLLOW THEIR PARENT LOT into the receiving warehouse.
+        // A "lot" is one Inventory row per (product, owner, warehouse, batch), so
+        // the SAME parent lot (lotNumber) has a row per warehouse. Repointing a
+        // unit's inventoryId to the destination row is exactly how its warehouse
+        // moves (warehouse is derived via inventoryId → Inventory.warehouseId) —
+        // the identical rule the seller-supply landing above already uses.
+        //
+        // PRESERVED verbatim: serial, lotNumber/batchNumber (the parent lot
+        // identity), productId, companyId, printed/printedAt, mfgBatchNo. Nothing
+        // is created, duplicated or deleted; no serial is regenerated. Runs in
+        // THIS transaction, so stock + units land together or not at all. No-op
+        // for non-serialized lots.
+        const units = await UnitSerial.find({
+          ownerType: "company", ownerId: companyId, inventoryId: line.inventoryId,
+          status: "shipped", currentShipmentId: shipment._id,
+        }).limit(recvQty).session(session);
+        if (units.length) {
+          await UnitSerial.updateMany(
+            { _id: { $in: units.map((u) => u._id) } },
+            { $set: { inventoryId: inv._id, status: "in_stock", currentShipmentId: null } },
+            { session }
+          );
+          await UnitEvent.insertMany(
+            units.map((u) => ({ companyId: u.companyId, serial: u.serial, event: "transferred_in", fromStatus: "shipped", toStatus: "in_stock", refType: "Transfer", refId: shipment._id, actorId: verifierId })),
+            { session }
+          );
+        }
       }
 
       const shortageQty = line.qty - recvQty;
@@ -571,6 +639,203 @@ async function reportException(ownerArg, shipmentId, { byUserId, note, lat, lng 
 
 /* --------------------------------------------------------------- queries */
 
+/* ------------------------------------------------- receive-by-lot lookup */
+
+// A transfer can only be received in these states (mirrors verifyReceipt).
+const RECEIVABLE = ["in_transit", "arrived", "verifying"];
+const ALREADY_RECEIVED = ["received", "delivered", "partially_received"];
+
+/**
+ * Resolve an EXACT parent lot number to the incoming warehouse transfer that is
+ * awaiting THIS receiver, for the Inventory → "Receive Lot" scan.
+ *
+ * READ-ONLY: moves no stock and changes no status. The caller confirms through
+ * the normal POST /shipments/:id/verify, so the atomic stock + unit move stays
+ * in verifyReceipt (single source of truth). Matching is exact (trim + upper
+ * only) — never partial/prefix.
+ */
+async function findIncomingByLot(ownerArg, { lotNumber, allowedWarehouseIds = null }) {
+  const owner = normalizeOwner(ownerArg);
+  const lot = String(lotNumber || "").trim().toUpperCase();
+  if (!lot) throw httpErr("Lot not found.", 404);
+
+  // 1) Does this exact lot exist for this owner at all?
+  const lotExists = await Inventory.exists({
+    ownerType: owner.ownerType, ownerId: owner.ownerId,
+    $or: [{ lotNumber: lot }, { batchNumber: lot }],
+  });
+  if (!lotExists) throw httpErr("Lot not found.", 404);
+
+  // 2) Warehouse transfers carrying this exact lot, newest first.
+  const all = await Shipment.find({
+    ...ownerScope(owner),
+    toType: "warehouse",
+    $or: [{ "lines.lotNumber": lot }, { "lines.batchNumber": lot }],
+  })
+    .sort({ createdAt: -1 })
+    .populate("fromWarehouseId", "name code")
+    .populate("toWarehouseId", "name code")
+    .populate("lines.productId", "productName skuNumber");
+  if (!all.length) throw httpErr("No incoming transfer found for this lot.", 404);
+
+  // 3) Only transfers destined to a warehouse this user actually receives for.
+  const mine = Array.isArray(allowedWarehouseIds)
+    ? all.filter((s) => allowedWarehouseIds.map(String).includes(String(s.toWarehouseId?._id || s.toWarehouseId)))
+    : all;
+  if (!mine.length) throw httpErr("This lot is not assigned to your warehouse.", 403);
+
+  const ready = mine.find((s) => RECEIVABLE.includes(s.status));
+  if (!ready) {
+    if (mine.some((s) => ALREADY_RECEIVED.includes(s.status))) throw httpErr("This transfer has already been received.", 409);
+    throw httpErr("This transfer is not ready to receive.", 409);
+  }
+
+  // 4) Enrich the matching line(s) with lot metadata for the confirm screen.
+  const lines = [];
+  for (const l of ready.lines || []) {
+    const matches = String(l.lotNumber || "").toUpperCase() === lot || String(l.batchNumber || "").toUpperCase() === lot;
+    if (!matches) continue;
+    const src = await Inventory.findById(l.inventoryId).select("mfgBatchNo mfgDate expiryDate").lean();
+    lines.push({
+      productId: l.productId?._id || l.productId,
+      productName: l.productId?.productName || "—",
+      lotNumber: l.lotNumber, batchNumber: l.batchNumber,
+      mfgBatchNo: src?.mfgBatchNo || null,
+      mfgDate: src?.mfgDate || null,
+      expiryDate: src?.expiryDate || null,
+      qty: l.qty,
+    });
+  }
+
+  return {
+    shipmentId: ready._id,
+    ref: ready.lrNumber || `SH-${String(ready._id).slice(-6).toUpperCase()}`,
+    status: ready.status,
+    // The manifest token is NOT secret (the sender can re-display it at will) and
+    // this caller is the authenticated, warehouse-scoped DESTINATION — so hand it
+    // back, letting Confirm Receive go through the normal verify endpoint.
+    qr: `${ready._id}.${ready.qrToken}`,
+    toWarehouseId: ready.toWarehouseId?._id || ready.toWarehouseId,
+    destination: ready.toWarehouseId?.name || "—",
+    source: ready.fromWarehouseId?.name || ready.fromLabel || "—",
+    dispatchedAt: ready.dispatchedAt || null,
+    lines,
+    totalQty: lines.reduce((s, l) => s + (l.qty || 0), 0),
+  };
+}
+
+/**
+ * READ-ONLY detail for ONE shipment/transfer: summary, the PARENT LOTS on its
+ * lines, and the EXACT child serials it moved. Writes nothing.
+ *
+ * Serials are resolved from the append-only UnitEvent log (refId = this
+ * shipment), NOT from UnitSerial.currentShipmentId — receipt clears that field,
+ * so the event log is the only record that survives the full lifecycle. No
+ * serial is ever synthesised: if the transfer hasn't been picked, the list is
+ * simply empty.
+ */
+async function shipmentDetails(ownerArg, shipmentId, { allowedWarehouseIds = null } = {}) {
+  const owner = normalizeOwner(ownerArg);
+  const shipment = await Shipment.findOne({ _id: shipmentId, ...ownerScope(owner) })
+    .populate("fromWarehouseId", "name code")
+    .populate("toWarehouseId", "name code")
+    .populate("lines.productId", "productName skuNumber mrp")
+    .lean();
+  if (!shipment) throw httpErr("Shipment not found", 404);
+
+  // Warehouse scoping: a scoped user may only open a movement their own
+  // warehouse took part in (source or destination).
+  if (Array.isArray(allowedWarehouseIds) && allowedWarehouseIds.length) {
+    const mine = allowedWarehouseIds.map(String);
+    const from = String(shipment.fromWarehouseId?._id || shipment.fromWarehouseId || "");
+    const to = String(shipment.toWarehouseId?._id || shipment.toWarehouseId || "");
+    if (!mine.includes(from) && !mine.includes(to)) throw httpErr("Access denied — wrong warehouse", 403);
+  }
+
+  // Every serial this shipment actually moved, from the audit trail.
+  const evs = await UnitEvent.find({ refId: shipment._id }).select("serial event at").sort({ at: 1 }).lean();
+  const stamps = new Map();
+  for (const e of evs) {
+    const s = stamps.get(e.serial) || {};
+    if (e.event === "picked") s.pickedAt = e.at;
+    if (e.event === "in_transit") s.dispatchedAt = e.at;
+    if (["supplied_to_seller", "transferred_in"].includes(e.event)) s.receivedAt = e.at;
+    stamps.set(e.serial, s);
+  }
+  const serials = [...stamps.keys()];
+  const units = serials.length
+    ? await UnitSerial.find({ serial: { $in: serials } }).select("serial lotNumber status ownerType inventoryId").lean()
+    : [];
+  const bySerial = new Map(units.map((u) => [u.serial, u]));
+
+  // Lot metadata for each line's parent lot.
+  const invIds = [...new Set((shipment.lines || []).map((l) => String(l.inventoryId)).filter(Boolean))];
+  const invRows = invIds.length
+    ? await Inventory.find({ _id: { $in: invIds } }).select("mfgBatchNo mfgDate expiryDate lotNumber batchNumber").lean()
+    : [];
+  const byInv = new Map(invRows.map((r) => [String(r._id), r]));
+
+  const parentLots = (shipment.lines || []).map((l) => {
+    const meta = byInv.get(String(l.inventoryId)) || {};
+    const lot = l.lotNumber || l.batchNumber || meta.lotNumber || "—";
+    const mine = serials.filter((s) => {
+      const u = bySerial.get(s);
+      return u && (String(u.lotNumber || "") === String(lot) || String(u.inventoryId) === String(l.inventoryId));
+    });
+    return {
+      lotNumber: lot,
+      batchNumber: l.batchNumber || null,
+      mfgBatchNo: meta.mfgBatchNo || null,
+      productName: l.productId?.productName || "—",
+      allocatedQty: Number(l.qty || 0),
+      receivedQty: l.receivedQty ?? null,
+      mfgDate: meta.mfgDate || null,
+      expiryDate: meta.expiryDate || null,
+      status: shipment.status,
+      units: mine.map((s) => {
+        const u = bySerial.get(s) || {};
+        const t = stamps.get(s) || {};
+        return {
+          serial: s,
+          lotNumber: u.lotNumber || lot,
+          status: u.status || "—",
+          owner: u.ownerType || null,
+          pickedAt: t.pickedAt || null,
+          dispatchedAt: t.dispatchedAt || null,
+          receivedAt: t.receivedAt || null,
+        };
+      }),
+    };
+  });
+
+  const totalQty = (shipment.lines || []).reduce((s, l) => s + Number(l.qty || 0), 0);
+  const value = (shipment.lines || []).reduce(
+    (s, l) => s + Number(l.qty || 0) * Number(l.productId?.mrp || 0), 0);
+
+  return {
+    summary: {
+      ref: shipment.lrNumber || `SH-${String(shipment._id).slice(-6).toUpperCase()}`,
+      refType: shipment.refType,
+      toType: shipment.toType,
+      source: shipment.fromWarehouseId?.name || shipment.fromLabel || "—",
+      destination: shipment.toWarehouseId?.name || shipment.toLabel || "—",
+      fromWarehouseId: shipment.fromWarehouseId?._id || shipment.fromWarehouseId || null,
+      toWarehouseId: shipment.toWarehouseId?._id || shipment.toWarehouseId || null,
+      products: (shipment.lines || []).map((l) => l.productId?.productName || "Item"),
+      quantity: totalQty,
+      value,
+      status: shipment.status,
+      createdAt: shipment.createdAt,
+      dispatchedAt: shipment.dispatchedAt || null,
+      deliveredAt: shipment.deliveredAt || null,
+      pickedAt: (shipment.statusHistory || []).find((e) => e.status === "picked")?.at || null,
+      receivedAt: (shipment.statusHistory || []).find((e) => ["received", "partially_received"].includes(e.status))?.at || null,
+    },
+    parentLots,
+    timeline: (shipment.statusHistory || []).map((e) => ({ status: e.status, at: e.at })),
+  };
+}
+
 async function listShipments(ownerArg, { status, warehouseIds } = {}) {
   const owner = normalizeOwner(ownerArg);
   const filter = { ...ownerScope(owner) };
@@ -608,4 +873,4 @@ async function listDiscrepancies(companyId, { status = "open" } = {}) {
   return Discrepancy.find({ companyId, ...(status ? { status } : {}) }).populate("productId", "productName").populate("shipmentId", "toLabel status").sort({ createdAt: -1 });
 }
 
-module.exports = { createShipment, approveShipment, pickShipment, packShipment, dispatchShipment, markArrived, verifyReceipt, completeDelivery, reportException, listShipments, getShipment, ensureManifest, listForDriver, listDiscrepancies, _internal: { qrFor } };
+module.exports = { createShipment, approveShipment, pickShipment, packShipment, dispatchShipment, markArrived, verifyReceipt, findIncomingByLot, shipmentDetails, completeDelivery, reportException, listShipments, getShipment, ensureManifest, listForDriver, listDiscrepancies, _internal: { qrFor } };

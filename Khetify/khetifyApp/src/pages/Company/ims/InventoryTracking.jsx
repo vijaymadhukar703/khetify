@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePermission } from '../../../context/PermissionContext';
+import { WAREHOUSE_ROLES } from '../../../lib/roles';
 import CompanyInventory from '../CompanyInventory';
 import ImsLots from './ImsLots';
 import ImsLotDashboard from './ImsLotDashboard';
@@ -22,16 +23,11 @@ import ImsLotDashboard from './ImsLotDashboard';
 // The Stock (CompanyInventory) and Batch (ImsLotDashboard) components, their
 // APIs and data logic are never removed — only which view a role sees changes.
 
-// Company warehouse-operations roles that get the simplified Lots-only view.
-// These are warehouse-scoped (services/warehouseScope.js) and manage lots; the
-// row actions (Transfer / Receive / Create) self-gate on each role's own
-// capabilities via <Can>, so a role only ever sees actions it already had.
-const WAREHOUSE_ROLES = new Set([
-  'operations_manager', // active consolidated warehouse/operations role
-  'warehouse_manager',  // legacy warehouse manager
-  'warehouse_operator', // legacy warehouse operator
-  'inventory_manager',  // legacy inventory manager
-]);
+// Company warehouse-operations roles that get the simplified Lots-only view
+// (shared definition — see lib/roles.js). These are warehouse-scoped
+// (services/warehouseScope.js) and manage lots; the row actions (Transfer /
+// Receive / Create) self-gate on each role's own capabilities via <Can>, so a
+// role only ever sees actions it already had.
 
 const TABS = [
   { key: 'stock', label: 'Stock', icon: 'list_alt', render: () => <CompanyInventory /> },
@@ -57,7 +53,15 @@ const InventoryTracking = () => {
         <h1 className="text-2xl font-bold text-stone-900 mb-1">Inventory</h1>
         {/* <p className="text-stone-500 mb-5">Track stock on hand and lots.</p> */}
 
-        <ImsLots showSummary showStockStatus paginate showBatchNo fluid requireWarehouse hideReceive={isMainCompany} />
+        {/* Main Company mints lots (Create) but doesn't perform receipts; the
+            Company Warehouse never mints a lot — its "Receive Lot" scans an
+            incoming parent lot and confirms the transfer into this warehouse. */}
+        <ImsLots
+          showSummary showStockStatus paginate showBatchNo fluid requireWarehouse
+          hideReceive={isMainCompany}
+          hideCreate={isWarehouse}
+          receiveTransfer={isWarehouse}
+        />
       </div>
     );
   }

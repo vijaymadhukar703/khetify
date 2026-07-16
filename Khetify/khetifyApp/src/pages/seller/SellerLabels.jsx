@@ -2,9 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import Barcode128 from '../../lib/barcode128';
-import ScanBox from '../../Components/ims/ScanBox';
 import { Field, inputCls, PrimaryBtn } from '../Company/ims/ImsUi';
-import { getSellerLink, getSellerLots, getSellerUnits, printSellerUnits, sellerScan } from '../../lib/sellerApi';
+import { getSellerLink, getSellerLots, getSellerUnits, printSellerUnits } from '../../lib/sellerApi';
 
 const toast = (icon, title) => Swal.fire({ icon, title, toast: true, position: 'top-end', timer: 2200, showConfirmButton: false });
 const apiError = (err) => toast('error', err?.response?.data?.message || err.message || 'Something went wrong');
@@ -35,7 +34,6 @@ const SellerLabels = () => {
   const [units, setUnits] = useState([]);
   const [layout, setLayout] = useState('65');
   const [custom, setCustom] = useState({ cols: 4, w: 50, h: 30 });
-  const [scanResult, setScanResult] = useState(null);
 
   useEffect(() => {
     getSellerLink()
@@ -78,10 +76,6 @@ const SellerLabels = () => {
     if (serials.length) { try { await printSellerUnits(serials); loadUnits(lotId); } catch { /* ignore */ } }
   };
 
-  const doScan = async (code) => {
-    try { const r = await sellerScan(code); setScanResult(r?.data); } catch (err) { apiError(err); setScanResult(null); }
-  };
-
   if (approved === null) return <div className="flex-1 p-8 text-center text-stone-400 font-sora">Loading…</div>;
   if (!approved) {
     return (
@@ -102,19 +96,6 @@ const SellerLabels = () => {
         <div>
           <h1 className="text-xl font-bold text-stone-900">Labels</h1>
           <p className="text-sm text-stone-500">Print and scan the unit labels you received from your supplying company. Serials are assigned by the company.</p>
-        </div>
-
-        {/* Scan panel */}
-        <div className="no-print border border-stone-200 rounded-2xl p-4 shadow-sm">
-          <p className="text-xs font-bold text-stone-500 mb-2">Scan a unit / lot</p>
-          <ScanBox onScan={doScan} />
-          {scanResult && (
-            <div className="mt-3 text-sm bg-stone-50 rounded-lg p-3">
-              <span className="font-bold uppercase text-[10px] tracking-wide text-stone-400 mr-2">{scanResult.type}</span>
-              {scanResult.type === 'unit' && <span>{scanResult.unit.serial} · <b>{scanResult.unit.status}</b> · {scanResult.unit.productId?.productName}</span>}
-              {scanResult.type === 'lot' && <span>{scanResult.lot} · {scanResult.rows?.length} row(s)</span>}
-            </div>
-          )}
         </div>
 
         {/* Controls */}

@@ -75,6 +75,34 @@ exports.dispatch = async (req, res) => {
     res.json({ success: true, message: "Dispatched", data: { shipment: { _id: r.shipment._id, status: r.shipment.status }, qrPayload: r.qrPayload } });
   } catch (e) { fail(res, e); }
 };
+/**
+ * GET /api/shipments/incoming?lot=<PARENT LOT NO>
+ * Resolve an exact parent lot to the incoming transfer awaiting THIS warehouse
+ * (Inventory → Receive Lot scan). Read-only — the receipt itself still goes
+ * through POST /shipments/:id/verify, which moves the stock atomically.
+ */
+exports.incomingByLot = async (req, res) => {
+  try {
+    const scope = await warehouseScope(req.user);
+    const r = await shipmentService.findIncomingByLot(req.user.companyId, {
+      lotNumber: req.query.lot,
+      allowedWarehouseIds: scope,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) { fail(res, e); }
+};
+/**
+ * GET /api/shipments/:id/details
+ * READ-ONLY: summary + parent lots + the exact child serials this transfer
+ * moved. Warehouse-scoped: a scoped user can only open their own movements.
+ */
+exports.shipmentDetails = async (req, res) => {
+  try {
+    const scope = await warehouseScope(req.user);
+    const r = await shipmentService.shipmentDetails(req.user.companyId, req.params.id, { allowedWarehouseIds: scope });
+    res.json({ success: true, data: r });
+  } catch (e) { fail(res, e); }
+};
 exports.verifyReceipt = async (req, res) => {
   try {
     const scope = await warehouseScope(req.user);

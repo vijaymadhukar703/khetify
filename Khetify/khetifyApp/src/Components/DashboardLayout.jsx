@@ -59,7 +59,12 @@ const DashboardLayout = () => {
 
   // Same gating as the Hub: HIDE on capability (RBAC), LOCK on subscription.
   const imsActive = !subLoading && !!plan && plan !== 'free';
-  const visible = (m) => !(m.capability && !permLoading && !can(m.capability));
+  // HIDE on capability (RBAC) — plus an optional `roles` pin for modules that
+  // belong to specific roles only (e.g. the Company Warehouse's own Transfer
+  // History), so a wildcard role like company_admin doesn't also pick them up.
+  const visible = (m) =>
+    !(m.capability && !permLoading && !can(m.capability)) &&
+    !(m.roles && !permLoading && !m.roles.includes(role));
   const locked = (m) => {
     if (m.feature === 'ims') return !imsActive;
     if (m.feature === FEATURES.API_ACCESS) return !has(FEATURES.API_ACCESS);

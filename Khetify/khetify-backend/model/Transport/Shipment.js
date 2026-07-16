@@ -73,6 +73,13 @@ const shipmentSchema = new mongoose.Schema(
     lrNumber: { type: String },
     freightCost: { type: Number },
 
+    // Optional despatch paperwork captured at Confirm Dispatch. All free-text
+    // and additive — no existing field carries these today.
+    bulkPackingNumber: { type: String },
+    deliveryChallanNumber: { type: String },
+    invoiceChallanNumber: { type: String },
+    gatePassNumber: { type: String },
+
     plannedRoute: [{ stopType: String, refId: mongoose.Schema.Types.ObjectId, eta: Date }],
 
     status: {
