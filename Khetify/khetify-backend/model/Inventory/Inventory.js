@@ -45,6 +45,18 @@ const inventorySchema = new mongoose.Schema(
     damagedStock: { type: Number, default: 0 },
     availableStock: { type: Number, default: 0 },
 
+    // Goods BOOKED to this warehouse but not yet RECEIVED by it (Company →
+    // Company Warehouse assignment). Deliberately OUTSIDE the invariant
+    // availableStock = onlineStock + offlineStock - reservedStock, so pending
+    // stock is never sellable, pickable or transferable, and never lands in any
+    // stock total. The warehouse's Confirm Receive moves it:
+    //   inTransitStock -= qty ; offlineStock += qty ; availableStock += qty
+    // and writes the single `supply_in` ledger row (nothing is "in stock" — and
+    // so nothing is ledgered — until that receipt happens).
+    inTransitStock: { type: Number, default: 0 },
+    receivedAt: { type: Date, default: null },
+    receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
     lowStockThreshold: { type: Number, default: 0 },
 
     // Weighted-average cost per unit, maintained on each receipt (GRN unitCost).

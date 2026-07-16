@@ -83,12 +83,18 @@ const POPULATE_PRODUCT = {
  * warehouse. Owner-aware: defaults to ownerType "company" so the existing
  * company caller is unchanged; sellers pass ownerType "seller".
  */
-async function getLots(ownerId, { ownerType = "company", productId, warehouseId, warehouseIds, expiring, expired } = {}) {
+async function getLots(ownerId, { ownerType = "company", productId, warehouseId, warehouseIds, expiring, expired, excludePending = false } = {}) {
   const filter = {
     ownerType,
     ownerId,
     batchNumber: { $ne: null },
   };
+  // A warehouse must not see (or count) stock it hasn't received yet: hide rows
+  // that are purely awaiting receipt (nothing on the books, qty still in
+  // transit). A row with some received stock AND more incoming still shows.
+  if (excludePending) {
+    filter.$nor = [{ inTransitStock: { $gt: 0 }, availableStock: { $lte: 0 } }];
+  }
   if (productId) filter.productId = productId;
   if (warehouseId) filter.warehouseId = warehouseId;
   // Warehouse-level access control: restrict to the caller's assigned
@@ -119,6 +125,116 @@ async function getLots(ownerId, { ownerType = "company", productId, warehouseId,
     .sort(sort);
 }
 
+/* ---------- Company Warehouse: pending receipt ---------- */
+
+/**
+ * Find the lot AWAITING RECEIPT at this warehouse, by EXACT parent lot number.
+ * Read-only — moves nothing. Normalisation is trim + uppercase only; the lot
+ * number is matched verbatim (never partial/prefix).
+ */
+async function findPendingLot(companyId, { lotNumber, allowedWarehouseIds = null }) {
+  const lot = String(lotNumber || "").trim().toUpperCase();
+  if (!lot) throw httpErr("Lot not found.", 404);
+
+  const rows = await Inventory.find({
+    ownerType: "company", ownerId: companyId,
+    $or: [{ lotNumber: lot }, { batchNumber: lot }],
+  })
+    .populate("productId", "productName skuNumber")
+    .populate("warehouseId", "name code");
+  if (!rows.length) throw httpErr("Lot not found.", 404);
+
+  const pending = rows.filter((r) => (r.inTransitStock || 0) > 0);
+  if (!pending.length) {
+    // The lot exists but nothing is awaiting receipt for it.
+    const mineReceived = rows.some((r) =>
+      !Array.isArray(allowedWarehouseIds) ||
+      allowedWarehouseIds.map(String).includes(String(r.warehouseId?._id || r.warehouseId))
+    );
+    throw httpErr(mineReceived ? "This transfer has already been received." : "No incoming transfer found for this lot.", 409);
+  }
+
+  const mine = Array.isArray(allowedWarehouseIds)
+    ? pending.filter((r) => allowedWarehouseIds.map(String).includes(String(r.warehouseId?._id || r.warehouseId)))
+    : pending;
+  if (!mine.length) throw httpErr("This lot is not assigned to your warehouse.", 403);
+
+  const row = mine[0];
+  return {
+    inventoryId: row._id,
+    lotNumber: row.lotNumber || row.batchNumber,
+    batchNumber: row.batchNumber,
+    mfgBatchNo: row.mfgBatchNo || null,
+    productId: row.productId?._id || row.productId,
+    productName: row.productId?.productName || "—",
+    warehouseId: row.warehouseId?._id || row.warehouseId,
+    destination: row.warehouseId?.name || "—",
+    qty: row.inTransitStock,
+    mfgDate: row.mfgDate || null,
+    expiryDate: row.expiryDate || null,
+    status: "awaiting_receipt",
+  };
+}
+
+/**
+ * CONFIRM RECEIPT of a pending lot at the warehouse. Atomically moves the whole
+ * in-transit qty onto the books, writes the single `supply_in` ledger row, and
+ * activates the lot's already-generated child units (generated/printed →
+ * in_stock) — their serial, lotNumber, productId and printed flag are untouched
+ * and no unit is created or deleted. Conditional on inTransitStock, so a repeat
+ * confirm can never double-add.
+ */
+async function confirmLotReceipt(companyId, inventoryId, { performedBy, allowedWarehouseIds = null } = {}) {
+  const row = await Inventory.findOne({ _id: inventoryId, ownerType: "company", ownerId: companyId });
+  if (!row) throw httpErr("Lot not found.", 404);
+  if (Array.isArray(allowedWarehouseIds) && !allowedWarehouseIds.map(String).includes(String(row.warehouseId))) {
+    throw httpErr("This lot is not assigned to your warehouse.", 403);
+  }
+  const qty = Number(row.inTransitStock || 0);
+  if (qty <= 0) throw httpErr("This transfer has already been received.", 409);
+
+  const inv = await withTransaction(async (session) => {
+    // Conditional on the exact pending qty — a concurrent/repeat confirm fails.
+    const doc = await Inventory.findOneAndUpdate(
+      { _id: row._id, ownerType: "company", ownerId: companyId, inTransitStock: { $gte: qty } },
+      {
+        $inc: { inTransitStock: -qty, offlineStock: qty, availableStock: qty },
+        $set: { receivedAt: new Date(), receivedBy: performedBy || null },
+      },
+      { new: true, session }
+    );
+    if (!doc) throw httpErr("This transfer has already been received.", 409);
+    await ledger(doc, {
+      type: "supply_in", channel: "internal", quantity: qty,
+      refType: "Transfer", refId: doc._id, performedBy,
+      note: `Lot ${doc.lotNumber || doc.batchNumber} received into warehouse`,
+      session,
+    });
+
+    // Child units already minted for this lot become available HERE — never
+    // before the receipt. Same row, so parent lot + serials are unchanged.
+    const units = await UnitSerial.find({
+      ownerType: "company", ownerId: companyId, inventoryId: doc._id,
+      status: { $in: ["generated", "printed"] },
+    }).session(session);
+    if (units.length) {
+      await UnitSerial.updateMany(
+        { _id: { $in: units.map((u) => u._id) } },
+        { $set: { status: "in_stock" } },
+        { session }
+      );
+      await UnitEvent.insertMany(
+        units.map((u) => ({ companyId: u.companyId, serial: u.serial, event: "in_stock", fromStatus: u.status, toStatus: "in_stock", refType: "Transfer", refId: doc._id, actorId: performedBy })),
+        { session }
+      );
+    }
+    return doc;
+  });
+
+  emitInventoryUpdate(inv);
+  return inv;
+}
+
 /* ---------- operations ---------- */
 
 /**
@@ -147,6 +263,11 @@ async function receiveLot({
   refId,
   unitCost,
   session,
+  // Company → Company Warehouse assignment: book the qty to the warehouse as
+  // IN TRANSIT instead of stocking it. The warehouse must scan the parent lot
+  // and Confirm Receive (confirmLotReceipt) before it becomes available. GRN
+  // posting and every other caller leave this false — a GRN *is* the receipt.
+  pendingReceipt = false,
 }) {
   if (!productId || !qty || qty <= 0) {
     const err = new Error("productId, batchNumber and positive qty are required");
@@ -196,6 +317,19 @@ async function receiveLot({
       const prevCost = prev?.costPrice || 0;
       setFields.costPrice = prevQty + qty > 0 ? (prevQty * prevCost + qty * unitCost) / (prevQty + qty) : unitCost;
     }
+    // PENDING RECEIPT: book the qty to the warehouse as in-transit only. It is
+    // NOT stock yet — no offline/available, and therefore NO ledger row (the
+    // ledger tracks stock on the books; the single `supply_in` is written by
+    // confirmLotReceipt when the warehouse actually receives it).
+    if (pendingReceipt) {
+      const pending = await Inventory.findOneAndUpdate(
+        { productId, ownerType: "company", ownerId, warehouseId, batchNumber },
+        { $inc: { inTransitStock: qty }, $set: { ...setFields, receivedAt: null, receivedBy: null } },
+        { new: true, upsert: true, session: s }
+      );
+      return pending;
+    }
+
     const doc = await Inventory.findOneAndUpdate(
       { productId, ownerType: "company", ownerId, warehouseId, batchNumber },
       { $inc: { offlineStock: qty, availableStock: qty }, $set: setFields },
@@ -424,6 +558,151 @@ async function allocateFEFO({ ownerType = "company", ownerId, productId, qty, re
     return { allocations: allocs, touched: touchedLocal };
   });
 
+  for (const inv of touched) emitInventoryUpdate(inv);
+  return allocations;
+}
+
+/**
+ * PLAN which lot(s) will fulfil `qty` — the READ-ONLY twin of allocateFEFO.
+ * Moves NO stock and writes NO ledger row.
+ *
+ * Used by SUPPLY APPROVAL, which is AUTHORIZATION ONLY: it records the intended
+ * source lot(s) so the warehouse knows what to pick, but the stock must stay
+ * fully available until the warehouse actually PICKS it (reserveLotQty).
+ * Availability here is an advisory pre-check; the authoritative check is the
+ * conditional reserve at pick.
+ *
+ * Pass `inventoryId` to plan ONE specific parent lot; omit it for FEFO order.
+ */
+async function planAllocation({ ownerType = "company", ownerId, productId, qty, warehouseId, inventoryId }) {
+  qty = Number(qty);
+  if (!qty || qty <= 0) { const e = new Error("A positive qty is required"); e.status = 400; throw e; }
+  const now = new Date();
+
+  let lots;
+  if (inventoryId) {
+    const lot = await Inventory.findOne({ _id: inventoryId, ownerType, ownerId });
+    if (!lot) { const e = new Error("Selected lot not found"); e.status = 404; throw e; }
+    if (warehouseId && String(lot.warehouseId) !== String(warehouseId)) {
+      const e = new Error("Selected lot is not in the chosen source warehouse"); e.status = 400; throw e;
+    }
+    lots = [lot];
+  } else {
+    lots = await Inventory.find({
+      productId, ownerType, ownerId,
+      ...(warehouseId ? { warehouseId } : {}),
+      availableStock: { $gt: 0 },
+      $or: [{ expiryDate: null }, { expiryDate: { $gte: now } }],
+    }).sort({ expiryDate: 1 });
+  }
+
+  const frozen = await frozenWarehouseIds(ownerId);
+  lots = lots.filter((l) => !frozen.has(String(l.warehouseId)));
+  const total = lots.reduce((s, l) => s + (l.availableStock || 0), 0);
+  if (total < qty) { const e = new Error(`INSUFFICIENT_STOCK (have ${total}, need ${qty})`); e.status = 409; throw e; }
+
+  const allocs = [];
+  let remaining = qty;
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(lot.availableStock, remaining);
+    remaining -= take;
+    allocs.push({
+      inventoryId: lot._id, lotNumber: lot.lotNumber, batchNumber: lot.batchNumber,
+      warehouseId: lot.warehouseId, qty: take, reservedQty: 0, committed: false, serials: [],
+    });
+  }
+  return allocs;
+}
+
+/**
+ * RESERVE `qty` on ONE lot — this is the moment stock stops being available.
+ * Called at PICK (not at approval). Atomic + conditional on availableStock, so
+ * two picks can never reserve the same units. Writes one `reserve` ledger row.
+ */
+async function reserveLotQty({ ownerType = "company", ownerId, inventoryId, qty, refType = "SupplyOrder", refId, performedBy, session }) {
+  qty = Number(qty);
+  if (!qty || qty <= 0) return null;
+  const run = async (s) => {
+    const inv = await Inventory.findOneAndUpdate(
+      { _id: inventoryId, ownerType, ownerId, availableStock: { $gte: qty } },
+      { $inc: { reservedStock: qty, availableStock: -qty } },
+      { new: true, session: s }
+    );
+    if (!inv) { const e = new Error("INSUFFICIENT_STOCK — this lot no longer has enough available stock"); e.status = 409; throw e; }
+    await ledger(inv, { type: "reserve", channel: "internal", quantity: -qty, refType, refId, performedBy, note: `Reserve from lot ${inv.lotNumber || inv.batchNumber}`, session: s });
+    return inv;
+  };
+  const inv = session ? await run(session) : await withTransaction(run);
+  emitInventoryUpdate(inv);
+  return inv;
+}
+
+/**
+ * RELEASE `qty` reserved on ONE lot back to available (cancel BEFORE dispatch).
+ * Never called once an allocation is committed (dispatched) — those goods have
+ * physically left and only the return flow may bring them back.
+ */
+async function releaseLotQty({ ownerType = "company", ownerId, inventoryId, qty, refType = "SupplyOrder", refId, performedBy }) {
+  qty = Number(qty);
+  if (!qty || qty <= 0) return null;
+  const inv = await withTransaction(async (session) => {
+    const row = await Inventory.findOneAndUpdate(
+      { _id: inventoryId, ownerType, ownerId, reservedStock: { $gte: qty } },
+      { $inc: { reservedStock: -qty, availableStock: qty } },
+      { new: true, session }
+    );
+    if (!row) return null; // nothing reserved to release
+    await ledger(row, { type: "release", channel: "internal", quantity: qty, refType, refId, performedBy, note: `Release lot ${row.lotNumber || row.batchNumber}`, session });
+    return row;
+  });
+  if (inv) emitInventoryUpdate(inv);
+  return inv;
+}
+
+/**
+ * Reserve `qty` from ONE specific lot (Inventory row) — the lot-specific
+ * counterpart to allocateFEFO. Used when the operator chooses the exact PARENT
+ * LOT to fulfil from (e.g. a lot-specific company → seller transfer), so the
+ * reserved allocation IS that lot and its child unit serials validate at pick
+ * (the pick checks unit.inventoryId ∈ the order's reserved allocations).
+ *
+ * Same reservation semantics as FEFO: availableStock → reservedStock, one
+ * `reserve` ledger row, identical allocation shape. Reserves NOTHING extra —
+ * this does not create stock; it just moves the lot's available into reserved.
+ */
+async function allocateFromLot({ ownerType = "company", ownerId, inventoryId, qty, warehouseId, refId, refType = "SupplyOrder", performedBy }) {
+  qty = Number(qty);
+  if (!inventoryId || !qty || qty <= 0) {
+    const err = new Error("inventoryId and a positive qty are required");
+    err.status = 400;
+    throw err;
+  }
+  const lot = await Inventory.findOne({ _id: inventoryId, ownerType, ownerId });
+  if (!lot) { const err = new Error("Selected lot not found"); err.status = 404; throw err; }
+  // The chosen lot must sit in the assigned source warehouse.
+  if (warehouseId && String(lot.warehouseId) !== String(warehouseId)) {
+    const err = new Error("Selected lot is not in the chosen source warehouse"); err.status = 400; throw err;
+  }
+  const frozen = await frozenWarehouseIds(ownerId);
+  if (frozen.has(String(lot.warehouseId))) { const err = new Error("Selected lot is under an audit freeze"); err.status = 409; throw err; }
+  if ((lot.availableStock || 0) < qty) {
+    const err = new Error(`INSUFFICIENT_STOCK (lot has ${lot.availableStock || 0}, need ${qty})`); err.status = 409; throw err;
+  }
+
+  const { allocations, touched } = await withTransaction(async (session) => {
+    const inv = await Inventory.findOneAndUpdate(
+      { _id: lot._id, availableStock: { $gte: qty } },
+      { $inc: { reservedStock: qty, availableStock: -qty } },
+      { new: true, session }
+    );
+    if (!inv) { const err = new Error("CONCURRENT_STOCK_CHANGE — retry"); err.status = 409; throw err; }
+    await ledger(inv, { type: "reserve", channel: "internal", quantity: -qty, refType, refId, performedBy, note: `Reserve from lot ${inv.lotNumber || inv.batchNumber}`, session });
+    return {
+      allocations: [{ inventoryId: inv._id, lotNumber: inv.lotNumber, batchNumber: inv.batchNumber, warehouseId: inv.warehouseId, qty, committed: false, serials: [] }],
+      touched: [inv],
+    };
+  });
   for (const inv of touched) emitInventoryUpdate(inv);
   return allocations;
 }
@@ -675,4 +954,4 @@ async function supplyTransfer({ companyId, sellerId, sourceWarehouseId, destWare
   return summary;
 }
 
-module.exports = { getLots, receiveLot, transferLot, sellFEFO, allocateFEFO, commitAllocation, commitSupplyAllocation, releaseAllocation, supplyTransfer, generateKhetifyLotNumber, autoLotNumber };
+module.exports = { getLots, receiveLot, findPendingLot, confirmLotReceipt, transferLot, sellFEFO, allocateFEFO, allocateFromLot, planAllocation, reserveLotQty, releaseLotQty, commitAllocation, commitSupplyAllocation, releaseAllocation, supplyTransfer, generateKhetifyLotNumber, autoLotNumber };

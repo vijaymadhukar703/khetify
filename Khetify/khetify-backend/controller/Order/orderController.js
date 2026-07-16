@@ -255,6 +255,7 @@ exports.updateStatus = async (req, res) => {
  */
 const TransferRequest = require("../../model/Transport/TransferRequest");
 const Shipment = require("../../model/Transport/Shipment");
+const { warehouseScope } = require("../../services/warehouseScope");
 
 // Condense a list of item names / lot numbers into one cell value:
 // "—" when empty, the single value, or "First +N more" for multiple distinct.
@@ -286,6 +287,29 @@ exports.getHistory = async (req, res) => {
     const { from, to, type, status, warehouseId, sellerId, productId, q } = req.query;
     const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
 
+    // WAREHOUSE SCOPING (server-enforced, never trusted from the client).
+    // A warehouse-scoped user (Company Warehouse) may only ever see movements
+    // their own warehouse(s) took part in — as SOURCE or DESTINATION. An
+    // unscoped caller (the main Company, scope === null) is unaffected, so the
+    // Company Transfer History keeps its exact current behaviour.
+    const scope = await warehouseScope(req.user);
+    const scoped = Array.isArray(scope) && scope.length > 0;
+    // Explicit WAREHOUSE-HISTORY mode (?scope=warehouse) — "warehouse TRANSFERS
+    // MY warehouse took part in". Deny by default: warehouseScope() treats a
+    // user with no assigned warehouses as UNSCOPED (legacy rule other callers
+    // rely on), which must never mean "show company-wide data" on this view.
+    const warehouseOnly = req.query.scope === "warehouse";
+    if (warehouseOnly && !scoped) {
+      return res.json({ success: true, count: 0, data: [] });
+    }
+    // Honour an explicit ?warehouseId, but never outside the caller's scope.
+    const whFilter = scoped
+      ? (warehouseId && scope.map(String).includes(String(warehouseId)) ? [warehouseId] : scope)
+      : (warehouseId ? [warehouseId] : null);
+    const whOr = whFilter
+      ? [{ fromWarehouseId: { $in: whFilter } }, { toWarehouseId: { $in: whFilter } }]
+      : null;
+
     const dateBetween = (d) => {
       if (from && d < new Date(from)) return false;
       if (to && d > new Date(to)) return false;
@@ -294,8 +318,10 @@ exports.getHistory = async (req, res) => {
 
     const out = [];
 
-    // 1) Seller / customer orders
-    if (!type || type === "seller" || type === "order") {
+    // 1) Seller / customer orders — skipped entirely for a warehouse-scoped
+    //    caller: an order has no warehouse dimension, so it can never be "this
+    //    warehouse's" movement.
+    if (!scoped && (!type || type === "seller" || type === "order")) {
       const f = { companyId };
       if (status) f.status = status;
       if (sellerId) f.customerId = sellerId;
@@ -327,7 +353,7 @@ exports.getHistory = async (req, res) => {
     if (!type || type === "transfer") {
       const f = { companyId };
       if (productId) f.productId = productId;
-      if (warehouseId) f.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
+      if (whOr) f.$or = whOr;
       const transfers = await TransferRequest.find(f)
         .sort({ createdAt: -1 }).limit(limit)
         .populate("fromWarehouseId", "name").populate("toWarehouseId", "name")
@@ -342,6 +368,9 @@ exports.getHistory = async (req, res) => {
           party: `${t.fromWarehouseId?.name || "?"} → ${t.toWarehouseId?.name || "?"}`,
           from: t.fromWarehouseId?.name || "—",
           to: t.toWarehouseId?.name || "—",
+          // Additive: lets a warehouse view derive Incoming/Outgoing by ID.
+          fromWarehouseId: t.fromWarehouseId?._id || t.fromWarehouseId || null,
+          toWarehouseId: t.toWarehouseId?._id || t.toWarehouseId || null,
           itemName: t.productId?.productName || "—",
           lotNo: "—", // transfer requests target a product, not a specific lot
           status: t.status,
@@ -358,7 +387,15 @@ exports.getHistory = async (req, res) => {
     if (!type || type === "shipment") {
       const f = { companyId };
       if (status) f.status = status;
-      if (warehouseId) f.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
+      if (whOr) f.$or = whOr;
+      // WAREHOUSE-HISTORY mode shows warehouse TRANSFERS only — never "Sales".
+      // `toType` is the real stored discriminator (enum customer|warehouse|
+      // vendor|seller, default "customer") and is exactly what the UI's shared
+      // movementKind() reads: toType === "warehouse" => "Transfer", anything
+      // else (customer / seller supply / vendor) => "Sales". Filtering on the
+      // same field keeps the API and the Type column consistent by construction,
+      // so a Sales row can never reach the list, the cards or the totals.
+      if (warehouseOnly) f.toType = "warehouse";
       const shipments = await Shipment.find(f)
         .sort({ createdAt: -1 }).limit(limit)
         .populate("fromWarehouseId", "name").populate("toWarehouseId", "name")
@@ -383,6 +420,11 @@ exports.getHistory = async (req, res) => {
           party: `${s.fromWarehouseId?.name || "?"} → ${s.toWarehouseId?.name || "?"}`,
           from: s.fromWarehouseId?.name || s.fromLabel || "—",
           to: s.toWarehouseId?.name || s.toLabel || "—",
+          // Additive: lets a warehouse view derive Incoming/Outgoing by ID.
+          fromWarehouseId: s.fromWarehouseId?._id || s.fromWarehouseId || null,
+          toWarehouseId: s.toWarehouseId?._id || s.toWarehouseId || null,
+          dispatchedAt: s.dispatchedAt || null,
+          deliveredAt: s.deliveredAt || null,
           itemName: summarizeList(lines.map((l) => l.productId?.productName)),
           lotNo: summarizeList(lines.map((l) => l.lotNumber || l.batchNumber)),
           status: s.status,

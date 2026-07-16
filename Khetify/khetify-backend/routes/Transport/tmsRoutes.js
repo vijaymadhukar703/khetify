@@ -24,7 +24,11 @@ drivers.patch("/:id", auth, authorize("driver:manage"), ctrl.updateDriver);
 const shipments = express.Router();
 shipments.get("/", auth, authorize("shipment:read"), ctrl.listShipments);
 shipments.get("/discrepancies", auth, authorize("shipment:read"), ctrl.discrepancies);
+// Lot-scan lookup for Inventory → Receive Lot. MUST stay above "/:id".
+shipments.get("/incoming", auth, authorize("shipment:receive"), ctrl.incomingByLot);
 shipments.get("/:id", auth, authorize("shipment:read"), ctrl.getShipment);
+// Read-only traceability: parent lots + the exact child serials this transfer moved.
+shipments.get("/:id/details", auth, authorize("shipment:read"), ctrl.shipmentDetails);
 shipments.post("/", auth, authorize("shipment:create"), validate({ body: v.createShipmentBody }), ctrl.createShipment);
 shipments.post("/:id/approve", auth, authorize("shipment:dispatch"), ctrl.approve);
 shipments.post("/:id/dispatch", auth, authorize("shipment:dispatch"), validate({ body: v.dispatchBody }), ctrl.dispatch);

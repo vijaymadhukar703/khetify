@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { getSupplyOrders, updateSupplyStatus, getSupplySourceOptions } from '../../lib/imsApi';
+import { getSupplyOrders, updateSupplyStatus, getSupplySourceOptions, getLots } from '../../lib/imsApi';
 import BackButton from '../../Components/BackButton';
+import { usePermission } from '../../context/PermissionContext';
+import { WAREHOUSE_ROLES } from '../../lib/roles';
 
 const toast = (icon, title) => Swal.fire({ icon, title, toast: true, position: 'top-end', timer: 2200, showConfirmButton: false });
 const listOf = (r) => (Array.isArray(r) ? r : r?.data || []);
@@ -19,15 +22,39 @@ const STATUS_STYLE = {
 // SUPPLY REQUESTS — incoming bulk-supply requests from the dealers this company
 // supplies. Approving asks the company to ASSIGN A SOURCE WAREHOUSE, then runs
 // the lot-accurate company → seller transfer (FEFO from that warehouse).
+// Derived straight from the list payload — no extra API call and no new field.
+// Quantity comes from the STRUCTURED items[].quantity, never parsed from text.
+const totalQty = (o) => (o.items || []).reduce((s, it) => s + Number(it.quantity || 0), 0);
+const itemNames = (o) => (o.items || []).map((it) => it.productId?.productName || 'Item').join(', ');
+/** Parent lots this request was allocated from (items[].allocations[]). */
+const parentLotsOf = (o) => [
+  ...new Set((o.items || []).flatMap((it) => (it.allocations || []).map((a) => a.lotNumber || a.batchNumber).filter(Boolean))),
+];
+
+const PAGE_SIZE = 10; // Company Warehouse Supply Requests pagination
+
 const CompanySupplyRequests = () => {
+  const navigate = useNavigate();
+  const { role } = usePermission();
+  // The lot-aware view (Quantity, Source (Warehouse), Parent Lot No., View
+  // Details, pagination, wider layout) is shown to BOTH the MAIN COMPANY and the
+  // COMPANY WAREHOUSE. It is purely additive visibility — each role keeps its own
+  // actions (the Company still approves/rejects/assigns via actionsFor). Every
+  // other role keeps the original narrow list untouched.
+  const isWarehouse = WAREHOUSE_ROLES.has(role);
+  const isMainCompany = role === 'company_admin';
+  const enhanced = isMainCompany || isWarehouse;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [blocked, setBlocked] = useState(false); // plan lacks the supply workflow
   const [approving, setApproving] = useState(null); // the order whose source-warehouse modal is open
+  const [page, setPage] = useState(1); // Company Warehouse pagination (1-based)
 
   const load = useCallback(() => {
     getSupplyOrders()
-      .then((r) => { setRows(listOf(r)); setBlocked(false); })
+      // Back to page 1 whenever the list is (re)loaded — e.g. after an approve
+      // or reject changes what's in it.
+      .then((r) => { setRows(listOf(r)); setBlocked(false); setPage(1); })
       .catch((e) => {
         if (e?.response?.status === 403) setBlocked(true);
         setRows([]);
@@ -46,6 +73,16 @@ const CompanySupplyRequests = () => {
     if (isConfirmed) act(o, 'rejected');
   };
 
+  // Pagination (Company Warehouse only) — over the FULL list the page holds, so
+  // the counts always reflect every request, not just the visible page. This
+  // page has no filters today; if any are added, filter first and paginate the
+  // filtered result here, then reset `page` to 1 on change.
+  const totalPages = enhanced ? Math.max(1, Math.ceil(rows.length / PAGE_SIZE)) : 1;
+  const currentPage = Math.min(page, totalPages);
+  const rangeStart = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, rows.length);
+  const displayRows = enhanced ? rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE) : rows;
+
   const actionsFor = (o) => {
     if (['requested', 'under_review'].includes(o.status)) {
       return (
@@ -55,11 +92,12 @@ const CompanySupplyRequests = () => {
         </div>
       );
     }
-    // After approval the stock is RESERVED and the order flows through SEND
-    // STOCK: Operations picks, packs and prints a shipping label, then dispatch
-    // creates the shipment. The SELLER scans the manifest to receive. The order
-    // status mirrors the pipeline automatically.
-    if (o.status === 'approved') return <span className="text-[11px] font-bold text-stone-500">Reserved — pick in Send Stock</span>;
+    // Approval only AUTHORIZES and assigns the source — it moves no stock. The
+    // order then flows through SEND STOCK: Operations picks (stock is reserved
+    // there), packs and prints a shipping label, then dispatch creates the
+    // shipment and commits the stock out. The SELLER scans the manifest to
+    // receive. The order status mirrors the pipeline automatically.
+    if (o.status === 'approved') return <span className="text-[11px] font-bold text-stone-500">Assigned — pick in Send Stock</span>;
     if (o.status === 'picking') return <span className="text-[11px] font-bold text-blue-600">Picking in Send Stock</span>;
     if (o.status === 'packed') return <span className="text-[11px] font-bold text-indigo-600">Packed — print label &amp; dispatch</span>;
     if (['dispatched', 'in_transit', 'arrived'].includes(o.status)) return <span className="text-[11px] font-bold text-violet-600">In transit — awaiting seller scan</span>;
@@ -69,10 +107,12 @@ const CompanySupplyRequests = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 font-sora">
+    // Company Warehouse gets the wider, lot-aware view; every other role keeps
+    // the original centred layout.
+    <div className={`font-sora py-6 ${enhanced ? 'w-full px-3 sm:px-5' : 'max-w-7xl mx-auto px-4 sm:px-8'}`}>
       <BackButton />
       <h1 className="text-2xl font-bold text-stone-900 mb-1">Supply Requests</h1>
-      <p className="text-stone-500 mb-5">Bulk-supply requests from the dealers you supply. Approving reserves stock (FEFO) from a source warehouse you assign; pick, pack and dispatch it from Send Stock.</p>
+      <p className="text-stone-500 mb-5">Bulk-supply requests from the dealers you supply. Approving only authorizes the request and assigns a source warehouse — no stock moves. The warehouse reserves it at pick, then packs and dispatches it from Send Stock.</p>
 
       {blocked ? (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center max-w-xl mx-auto mt-8">
@@ -82,34 +122,104 @@ const CompanySupplyRequests = () => {
         </div>
       ) : (
         <div className="bg-white border border-stone-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[920px] resp-table">
+          <table className={`w-full text-left border-collapse resp-table ${enhanced ? 'min-w-[1180px]' : 'min-w-[920px]'}`}>
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/50">
-                {['Seller', 'Items', 'Destination', 'Source', 'Status', 'Requested', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h}</th>
+                {(enhanced
+                  ? ['Seller', 'Item', 'Quantity', 'Destination', 'Source (Warehouse)', 'Parent Lot No.', 'Status', 'Requested', 'View', 'Actions']
+                  : ['Seller', 'Items', 'Destination', 'Source', 'Status', 'Requested', 'Actions']
+                ).map((h) => (
+                  <th key={h} className="px-5 py-3.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {loading ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
+                <tr><td colSpan={enhanced ? 10 : 7} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-stone-400">No supply requests yet.</td></tr>
-              ) : rows.map((o) => (
-                <tr key={o._id} className="hover:bg-stone-50/60">
-                  <td data-label="Seller" className="px-5 py-3.5 font-bold text-stone-800 text-sm">{o.sellerId?.sellerInfo?.businessName || '—'}</td>
-                  <td data-label="Items" className="px-5 py-3.5 text-sm text-stone-600">
-                    {(o.items || []).map((it) => `${it.productId?.productName || 'Item'} ×${it.quantity}`).join(', ')}
-                  </td>
-                  <td data-label="Destination" className="px-5 py-3.5 text-sm text-stone-600">{o.warehouseId?.name || '—'}</td>
-                  <td data-label="Source" className="px-5 py-3.5 text-sm text-stone-600">{o.sourceWarehouseId?.name || '—'}</td>
-                  <td data-label="Status" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 capitalize ${STATUS_STYLE[o.status] || 'bg-stone-100 text-stone-500'}`}>{o.status?.replace('_', ' ')}</span></td>
-                  <td data-label="Requested" className="px-5 py-3.5 text-sm text-stone-500">{fmtDate(o.createdAt)}</td>
-                  <td data-label="Actions" className="px-5 py-3.5 cell-actions">{actionsFor(o)}</td>
-                </tr>
-              ))}
+                <tr><td colSpan={enhanced ? 10 : 7} className="px-5 py-10 text-center text-stone-400">No supply requests yet.</td></tr>
+              ) : displayRows.map((o) => {
+                const lots = parentLotsOf(o);
+                return (
+                  <tr key={o._id} className="hover:bg-stone-50/60">
+                    <td data-label="Seller" className="px-5 py-3.5 font-bold text-stone-800 text-sm">{o.sellerId?.sellerInfo?.businessName || '—'}</td>
+                    <td data-label={enhanced ? 'Item' : 'Items'} className="px-5 py-3.5 text-sm text-stone-600 max-w-[240px] truncate" title={itemNames(o)}>
+                      {enhanced ? itemNames(o) : (o.items || []).map((it) => `${it.productId?.productName || 'Item'} ×${it.quantity}`).join(', ')}
+                    </td>
+                    {enhanced && (
+                      <td data-label="Quantity" className="px-5 py-3.5 text-sm font-bold text-stone-800 tabular-nums">{totalQty(o).toLocaleString('en-IN')}</td>
+                    )}
+                    <td data-label="Destination" className="px-5 py-3.5 text-sm text-stone-600">{o.warehouseId?.name || '—'}</td>
+                    <td data-label={enhanced ? 'Source (Warehouse)' : 'Source'} className="px-5 py-3.5 text-sm text-stone-600">{o.sourceWarehouseId?.name || '—'}</td>
+                    {enhanced && (
+                      <td data-label="Parent Lot No." className="px-5 py-3.5 text-sm text-stone-600 max-w-[220px] truncate" title={lots.join(', ')}>
+                        {lots.length === 0
+                          ? <span className="text-stone-400">Not assigned</span>
+                          : <>
+                              <span className="font-mono text-xs">{lots[0]}</span>
+                              {lots.length > 1 && <span className="text-stone-400 text-xs"> +{lots.length - 1} more</span>}
+                            </>}
+                      </td>
+                    )}
+                    <td data-label="Status" className="px-5 py-3.5"><span className={`text-[11px] font-bold rounded-full px-2.5 py-1 capitalize ${STATUS_STYLE[o.status] || 'bg-stone-100 text-stone-500'}`}>{o.status?.replace('_', ' ')}</span></td>
+                    <td data-label="Requested" className="px-5 py-3.5 text-sm text-stone-500">{fmtDate(o.createdAt)}</td>
+                    {enhanced && (
+                      <td data-label="View" className="px-5 py-3.5">
+                        <button
+                          onClick={() => navigate(`/supply-requests/${o._id}`)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-stone-600 hover:text-[#EA2831] transition-colors whitespace-nowrap"
+                        >
+                          <span className="material-symbols-outlined text-base">visibility</span> View Details
+                        </button>
+                      </td>
+                    )}
+                    <td data-label="Actions" className="px-5 py-3.5 cell-actions">{actionsFor(o)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination (Company Warehouse) — counts reflect the full list, never
+          just the visible page. Nothing is hidden without these controls. */}
+      {!blocked && enhanced && !loading && rows.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+            Showing {rangeStart}–{rangeEnd} of {rows.length} requests
+          </p>
+          {totalPages > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-1">
+              <button
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                disabled={currentPage <= 1}
+                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-base">chevron_left</span> Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`min-w-[36px] text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${
+                    n === currentPage
+                      ? 'bg-[#EA2831] border-[#EA2831] text-white'
+                      : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage((n) => Math.min(totalPages, n + 1))}
+                disabled={currentPage >= totalPages}
+                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next <span className="material-symbols-outlined text-base">chevron_right</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -117,8 +227,8 @@ const CompanySupplyRequests = () => {
         <SourceWarehouseModal
           order={approving}
           onClose={() => setApproving(null)}
-          onConfirm={async (warehouseId) => {
-            await act(approving, 'approved', { sourceWarehouseId: warehouseId });
+          onConfirm={async (warehouseId, lotSelections) => {
+            await act(approving, 'approved', { sourceWarehouseId: warehouseId, lotSelections });
             setApproving(null);
           }}
         />
@@ -134,6 +244,9 @@ const SourceWarehouseModal = ({ order, onClose, onConfirm }) => {
   const [options, setOptions] = useState(null); // null = loading
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
+  // Optional per-item PARENT LOT choice at the chosen warehouse. Empty = FEFO.
+  const [lotsByProduct, setLotsByProduct] = useState({}); // productId -> lot rows
+  const [lotChoice, setLotChoice] = useState({});         // productId -> inventoryId ('' = auto/FEFO)
 
   useEffect(() => {
     getSupplySourceOptions(order._id)
@@ -145,10 +258,29 @@ const SourceWarehouseModal = ({ order, onClose, onConfirm }) => {
   const anyFulfills = (options || []).some((o) => o.canFulfill);
   const chosen = (options || []).find((o) => String(o.warehouseId) === String(selected));
 
+  // When a source warehouse is picked, load its lots per requested product so the
+  // operator can (optionally) reserve a SPECIFIC parent lot instead of FEFO.
+  useEffect(() => {
+    setLotChoice({});
+    setLotsByProduct({});
+    if (!chosen?.canFulfill) return;
+    let alive = true;
+    Promise.all((chosen.items || []).map((it) =>
+      getLots({ productId: it.productId, warehouseId: selected })
+        .then((r) => [String(it.productId), listOf(r).filter((l) => (l.availableStock || 0) > 0)])
+        .catch(() => [String(it.productId), []])
+    )).then((pairs) => { if (alive) setLotsByProduct(Object.fromEntries(pairs)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
+
   const confirm = async () => {
     if (!chosen?.canFulfill) return;
+    const lotSelections = Object.entries(lotChoice)
+      .filter(([, invId]) => invId)
+      .map(([productId, inventoryId]) => ({ productId, inventoryId }));
     setBusy(true);
-    try { await onConfirm(selected); } catch { /* surfaced by caller */ } finally { setBusy(false); }
+    try { await onConfirm(selected, lotSelections); } catch { /* surfaced by caller */ } finally { setBusy(false); }
   };
 
   return (
@@ -156,7 +288,7 @@ const SourceWarehouseModal = ({ order, onClose, onConfirm }) => {
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-stone-200">
           <h3 className="font-bold text-stone-900">Assign a source warehouse</h3>
-          <p className="text-xs text-stone-500 mt-0.5">Stock is reserved FEFO from the chosen warehouse, then picked &amp; packed in Send Stock.</p>
+          <p className="text-xs text-stone-500 mt-0.5">Choose where this is fulfilled from — FEFO by default, or a specific parent lot below. Approving moves no stock; the warehouse reserves it when it picks in Send Stock.</p>
         </div>
 
         <div className="p-4 overflow-y-auto space-y-2">
@@ -207,6 +339,34 @@ const SourceWarehouseModal = ({ order, onClose, onConfirm }) => {
               No single warehouse has enough stock for this request.
             </p>
           )}
+
+          {/* Optional: reserve a SPECIFIC parent lot per item (else FEFO). Choosing
+              a lot makes that lot's child unit serials scannable at Pick. */}
+          {chosen?.canFulfill && (
+            <div className="border-t border-stone-100 pt-3 mt-1 space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Source lot (optional — default FEFO)</p>
+              {(chosen.items || []).map((it) => {
+                const lots = lotsByProduct[String(it.productId)] || [];
+                return (
+                  <div key={it.productId} className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-stone-600 flex-1 truncate">{it.productName} · need {fmtNum(it.requiredQty)}</span>
+                    <select
+                      className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white min-w-[190px]"
+                      value={lotChoice[String(it.productId)] || ''}
+                      onChange={(e) => setLotChoice((c) => ({ ...c, [String(it.productId)]: e.target.value }))}
+                    >
+                      <option value="">Auto (FEFO — oldest first)</option>
+                      {lots.map((l) => (
+                        <option key={l._id} value={l._id} disabled={(l.availableStock || 0) < it.requiredQty}>
+                          {l.lotNumber || l.batchNumber} · {fmtNum(l.availableStock)} avail{(l.availableStock || 0) < it.requiredQty ? ' (too few)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-stone-200 flex justify-end gap-2">
@@ -216,7 +376,7 @@ const SourceWarehouseModal = ({ order, onClose, onConfirm }) => {
             disabled={!chosen?.canFulfill || busy}
             className="text-xs font-bold px-4 py-2 rounded-lg bg-[#EA2831] text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {busy ? 'Approving…' : 'Approve & reserve'}
+            {busy ? 'Approving…' : 'Approve & assign'}
           </button>
         </div>
       </div>

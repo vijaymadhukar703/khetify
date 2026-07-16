@@ -32,3 +32,15 @@ export const ROLE_LABEL = {
 export const roleLabel = (value) =>
   ROLE_LABEL[value] ||
   (value ? value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "—");
+
+// COMPANY WAREHOUSE roles — warehouse-scoped users who receive, pick, pack and
+// dispatch stock, as opposed to the MAIN COMPANY account (company_admin).
+// Mirrors backend config/permissions.js. Single source of truth for the
+// warehouse-only UI branches (Inventory, Supply Requests).
+export const WAREHOUSE_ROLES = new Set([
+  "operations_manager", // active consolidated warehouse/operations role
+  "warehouse_manager",  // legacy warehouse manager
+  "warehouse_operator", // legacy warehouse operator
+  "inventory_manager",  // legacy inventory manager
+]);
+export const isWarehouseRole = (role) => WAREHOUSE_ROLES.has(role);

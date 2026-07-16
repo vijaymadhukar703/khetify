@@ -84,9 +84,11 @@ async function generateUnits(companyId, inventoryId, qty, { performedBy } = {}) 
   if (!inv) throw httpErr("Inventory row not found", 404);
 
   // Can't label more units than the lot actually holds: verify against the
-  // inventory row's available stock, counting serials already generated.
+  // inventory row's stock, counting serials already generated. In-transit qty
+  // (booked to a warehouse but awaiting its receipt) counts toward the cap, so
+  // labels can be printed before the warehouse confirms receipt.
   const existing = await UnitSerial.countDocuments({ companyId, inventoryId: inv._id });
-  const cap = Number(inv.availableStock || 0);
+  const cap = Number(inv.availableStock || 0) + Number(inv.inTransitStock || 0);
   if (existing + qty > cap) {
     const remaining = Math.max(0, cap - existing);
     throw httpErr(
@@ -95,6 +97,27 @@ async function generateUnits(companyId, inventoryId, qty, { performedBy } = {}) 
     );
   }
 
+  // ROOT-CAUSE FIX (parent-lot / unit-serial warehouse assignment):
+  // When the parent lot (this Inventory row) is ALREADY assigned to a warehouse,
+  // its stock is physically on hand there — so serials minted afterwards are
+  // AVAILABLE in that warehouse immediately. They are already tied to the
+  // warehouse through `inventoryId` (Inventory.warehouseId is the lot's
+  // warehouse), so we do NOT add a duplicate warehouse field; we only start them
+  // in this model's available/pickable state ("in_stock") instead of "generated"
+  // (which would otherwise wait for a putaway that this direct-create flow never
+  // performs). Unassigned lots (warehouseId === null) keep the original
+  // "generated" flow untouched — no behaviour change for GRN/putaway-less lots.
+  //
+  // This adds NO stock: serials are tracking records over the lot's EXISTING
+  // quantity. The cap check above already prevents ever labelling more units
+  // than the lot holds, and re-generate/reprint can't create duplicates.
+  // A lot that is still AWAITING the warehouse's Confirm Receive is not stock
+  // yet, so its serials must NOT be pickable: they stay "generated" and are
+  // activated to "in_stock" by lotService.confirmLotReceipt. Only a lot whose
+  // stock is genuinely on the books mints available units.
+  const pendingReceipt = Number(inv.inTransitStock || 0) > 0 && Number(inv.availableStock || 0) <= 0;
+  const warehoused = !!inv.warehouseId && !pendingReceipt;
+  const initialStatus = warehoused ? "in_stock" : "generated";
   const lot = inv.lotNumber || inv.batchNumber || String(inv._id);
   const { start, end } = await nextSeqBlock(companyId, `unit-lot-${lotKey(lot)}`, qty);
   const docs = [];
@@ -110,15 +133,24 @@ async function generateUnits(companyId, inventoryId, qty, { performedBy } = {}) 
       inventoryId: inv._id,
       lotNumber: inv.lotNumber,
       batchNumber: inv.batchNumber,
-      status: "generated",
+      status: initialStatus,
     });
   }
   await UnitSerial.insertMany(docs, { ordered: false });
 
+  // Trace: record availability at the lot's warehouse for units minted straight
+  // into stock (keeps the unit lifecycle coherent for later pick/transfer).
+  if (warehoused) {
+    await UnitEvent.insertMany(
+      docs.map((d) => ({ companyId, serial: d.serial, event: "in_stock", fromStatus: "generated", toStatus: "in_stock", refType: "Lot", refId: inv._id, actorId: performedBy })),
+      { ordered: false }
+    );
+  }
+
   // Generating serials implies the product is serial-tracked going forward.
   await Product.updateOne({ _id: inv.productId, companyId }, { $set: { trackSerial: true } });
 
-  return { generated: docs.length, firstSerial: docs[0].serial, lastSerial: docs[docs.length - 1].serial };
+  return { generated: docs.length, firstSerial: docs[0].serial, lastSerial: docs[docs.length - 1].serial, status: initialStatus };
 }
 
 /* -------------------------------------------------------------- queries */
@@ -193,10 +225,14 @@ async function markPrinted(owner, serials, { actorId } = {}) {
   const moved = [];
   const events = [];
   for (const u of units) {
+    // First print of a still-"generated" unit advances it to "printed"; a unit
+    // already put away/available ("in_stock", etc.) keeps its stock status but
+    // is still flagged printed. The `printed` flag is what the Labels page reads,
+    // so it is set here for EVERY unit (independent of the stock status).
     const toStatus = u.status === "generated" ? "printed" : u.status;
-    if (u.status === "generated") {
-      await UnitSerial.updateOne({ _id: u._id }, { $set: { status: "printed" } });
-    }
+    const set = { printed: true, printedAt: new Date() };
+    if (u.status === "generated") set.status = "printed";
+    await UnitSerial.updateOne({ _id: u._id }, { $set: set });
     events.push({ companyId: u.companyId, serial: u.serial, event: "printed", fromStatus: u.status, toStatus, refType: "Label", actorId });
     moved.push(u.serial);
   }

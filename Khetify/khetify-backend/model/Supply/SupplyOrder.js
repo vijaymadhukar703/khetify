@@ -17,9 +17,11 @@ const supplyOrderSchema = new mongoose.Schema(
         // reserved allocations — no PickList/wave for supply).
         pickedQty: { type: Number, default: 0 },
         packedQty: { type: Number, default: 0 },
-        // FEFO reservation made at approval, from the assigned SOURCE warehouse.
-        // Mirrors an Order line's allocations so the SAME pick/pack/dispatch
-        // rails (Send Stock) can fulfil a supply order. Committed at dispatch.
+        // Source-lot PLAN recorded at approval, from the assigned SOURCE
+        // warehouse. Approval is AUTHORIZATION ONLY — it records which lot(s)
+        // will fulfil the request but does NOT touch stock. Stock becomes
+        // unavailable at PICK (available → reserved, tracked per lot in
+        // `reservedQty`) and is committed out at DISPATCH.
         // `serials` records the labeled units picked for this order (lot-accurate).
         allocations: [
           {
@@ -27,7 +29,11 @@ const supplyOrderSchema = new mongoose.Schema(
             lotNumber: { type: String },
             batchNumber: { type: String },
             warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse" },
+            // Planned qty from this lot (set at approval — no stock moved).
             qty: { type: Number },
+            // Qty ACTUALLY reserved from this lot at pick. Drives the dispatch
+            // commit and the release-on-cancel, so it can never double-deduct.
+            reservedQty: { type: Number, default: 0 },
             committed: { type: Boolean, default: false },
             serials: { type: [String], default: [] },
           },

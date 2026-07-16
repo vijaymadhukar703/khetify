@@ -53,6 +53,9 @@ export const getSupplyOrders = (params = {}) => data(api.get("supply-order", { p
 export const getSupplyPendingCount = () => data(api.get("supply-order/pending-count"));
 // Per-warehouse availability for the order's items (drives "Assign a source warehouse").
 export const getSupplySourceOptions = (id) => data(api.get(`supply-order/${id}/source-options`));
+// READ-ONLY detail for one request: summary + parent lots + the exact child
+// serials picked. Fetched only when opening View Details.
+export const getSupplyOrderDetails = (id) => data(api.get(`supply-order/${id}/details`));
 export const updateSupplyStatus = (id, body) => data(api.put(`supply-order/${id}/status`, body));
 // Direct pick/pack/dispatch on the supply order (no PickList/wave).
 export const pickSupplyOrder = (id, body) => data(api.post(`supply-order/${id}/pick`, body));
@@ -99,6 +102,14 @@ export const rejectTransferRequest = (id, body = {}) => data(api.post(`transfer-
 export const approveShipment = (id) => data(api.post(`shipments/${id}/approve`));
 export const dispatchShipment = (id, body = {}) => data(api.post(`shipments/${id}/dispatch`, body));
 export const verifyShipment = (id, body) => data(api.post(`shipments/${id}/verify`, body));
+// Inventory → Receive Lot: resolve an EXACT parent lot number to the incoming
+// transfer awaiting this warehouse. Read-only; confirm via verifyShipment.
+export const getIncomingTransferByLot = (lot) => data(api.get("shipments/incoming", { params: { lot } }));
+// Company Warehouse Receive Lot: an EXACT parent lot booked to this warehouse
+// but awaiting its receipt (inTransitStock). Read-only.
+export const getIncomingLot = (lot) => data(api.get("lots/incoming", { params: { lot } }));
+// The ONLY call that turns that pending qty into this warehouse's stock.
+export const confirmLotReceipt = (id) => data(api.post(`lots/${id}/confirm-receipt`));
 export const deliverShipment = (id, body) => data(api.post(`shipments/${id}/deliver`, body));
 export const shipmentException = (id, body) => data(api.post(`shipments/${id}/exception`, body));
 export const getDiscrepancies = (params = {}) => data(api.get("shipments/discrepancies", { params }));
@@ -139,6 +150,9 @@ export const createOrder = (body) => data(api.post("orders", body));
 export const getOrders = (params = {}) => data(api.get("orders", { params }));
 export const getOrderSummary = (params = {}) => data(api.get("orders/summary", { params }));
 export const getOrderHistory = (params = {}) => data(api.get("orders/history", { params }));
+// Read-only traceability for one transfer/shipment: summary + parent lots + the
+// exact child serials it moved. Warehouse-scoped server-side.
+export const getShipmentDetails = (id) => data(api.get(`shipments/${id}/details`));
 export const getOrder = (id) => data(api.get(`orders/${id}`));
 export const getOrderPicklist = (id) => data(api.get(`orders/${id}/picklist`));
 export const updateOrderStatus = (id, status) => data(api.patch(`orders/${id}/status`, { status }));

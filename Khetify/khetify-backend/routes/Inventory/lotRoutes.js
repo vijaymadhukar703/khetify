@@ -14,10 +14,16 @@ const {
   receiveLot,
   transferLot,
   sellFefo,
+  incomingLot,
+  confirmLotReceipt,
 } = require("../../controller/Inventory/lotController");
 
 // Reading lots: any logged-in company / inventory-reading role.
 router.get("/", auth, authorize("lot:read"), getLots);
+// Company Warehouse "Receive Lot" scan — resolve an exact pending parent lot.
+router.get("/incoming", auth, authorize("lot:read"), incomingLot);
+// Company Warehouse Confirm Receive — the only place pending qty becomes stock.
+router.post("/:id/confirm-receipt", auth, authorize("lot:receive"), confirmLotReceipt);
 
 // FEFO selling deducts stock — sales-capable roles only.
 router.post("/sell-fefo", auth, authorize("order:create"), validate({ body: sellFefoBody }), sellFefo);

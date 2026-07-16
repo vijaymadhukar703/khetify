@@ -93,14 +93,18 @@ const SellerTeam = () => {
 };
 
 const AddMemberModal = ({ warehouses, onClose, onDone }) => {
-  const [f, setF] = useState({ name: '', email: '', phone: '', role: 'seller_staff', password: '' });
+  // Role + warehouse start empty so the operator must actively pick both.
+  const [f, setF] = useState({ name: '', email: '', phone: '', role: '', password: '' });
   const [whs, setWhs] = useState([]);
   const [busy, setBusy] = useState(false);
   const u = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const toggleWh = (id) => setWhs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const submit = async () => {
     if (!f.name || !f.password || (!f.email && !f.phone)) { toast('error', 'Name, a contact (email/phone) and a password are required'); return; }
+    // Role must be chosen explicitly — an empty role would silently fall back to
+    // seller_staff on the backend (role || "seller_staff").
+    if (!f.role) { toast('error', 'Select a role'); return; }
+    if (warehouses.length > 0 && !whs.length) { toast('error', 'Select a warehouse'); return; }
     setBusy(true);
     try {
       await createSellerMember({ ...f, warehouseIds: whs });
@@ -109,30 +113,51 @@ const AddMemberModal = ({ warehouses, onClose, onDone }) => {
     } catch (e) { apiErr(e); } finally { setBusy(false); }
   };
 
+  // UI mirrors the Company "Add Team Member" modal (pages/Company/CompanyUsers.jsx):
+  // the same shared Modal/Field/inputCls/PrimaryBtn, one full-width field per row,
+  // stacked vertically. Seller wording, roles, warehouse multi-select, validation
+  // and the invite/password logic are unchanged.
   return (
     <Modal title="Invite team member" onClose={onClose}>
       <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /></Field>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-        <Field label="Email"><input className={inputCls} value={f.email} onChange={u('email')} /></Field>
-        <Field label="Phone"><input className={inputCls} value={f.phone} onChange={u('phone')} /></Field>
-      </div>
+      <Field label="Email"><input className={inputCls} value={f.email} onChange={u('email')} /></Field>
+      <Field label="Phone"><input className={inputCls} value={f.phone} onChange={u('phone')} /></Field>
+      {/* Dropdown stays ENABLED — Operations Manager is simply the only role a
+          new member can be given. (An existing member's role can still be
+          changed from the table.)
+          NB: the VALUE is the seller's own operations role `seller_manager` —
+          the company-side `operations_manager` is not a seller role and the API
+          rejects it (SELLER_ASSIGNABLE_ROLES). seller_manager is its exact
+          equivalent: operate warehouses/inventory/transfers, no team/billing. */}
       <Field label="Role *">
-        <select className={inputCls} value={f.role} onChange={u('role')}>
-          {SELLER_TEAM_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        <select className={inputCls} value={f.role} onChange={u('role')} required>
+          <option value="" disabled>Select role</option>
+          <option value="seller_manager">Operations Manager</option>
         </select>
       </Field>
-      <Field label="Temporary password *"><input className={inputCls} type="text" value={f.password} onChange={u('password')} placeholder="They sign in with this" /></Field>
       {warehouses.length > 0 && (
-        <div className="mb-3">
-          <label className="block text-xs font-bold text-stone-600 mb-1">Warehouses (optional — empty = all)</label>
-          <div className="flex flex-wrap gap-2">
-            {warehouses.map((w) => (
-              <button key={w._id} type="button" onClick={() => toggleWh(w._id)} className={`text-xs px-2.5 py-1 rounded-lg border ${whs.includes(w._id) ? 'border-[#EA2831] bg-red-50 text-[#EA2831]' : 'border-stone-200 text-stone-600'}`}>{w.name}</button>
-            ))}
-          </div>
-        </div>
+        // Same dropdown as the Company form's "Assigned Warehouse". Still stored
+        // as the warehouseIds ARRAY the API expects, so the payload shape is
+        // unchanged. "All warehouses (unassigned)" is no longer selectable — a
+        // warehouse must be chosen, so the blank option is a disabled placeholder.
+        <Field label="Assigned Warehouse *">
+          <select
+            className={inputCls}
+            value={whs[0] || ''}
+            onChange={(e) => setWhs(e.target.value ? [e.target.value] : [])}
+            required
+          >
+            <option value="" disabled>Select warehouse</option>
+            {warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
+          </select>
+        </Field>
       )}
-      <PrimaryBtn disabled={busy} onClick={submit}>{busy ? 'Adding…' : 'Add member'}</PrimaryBtn>
+      <Field label="Temporary Password *">
+        <input className={inputCls} type="text" value={f.password} onChange={u('password')} placeholder="They sign in with this" />
+      </Field>
+      <PrimaryBtn disabled={busy} onClick={submit}>
+        <span className="material-symbols-outlined text-base">person_add</span> {busy ? 'Adding…' : 'Add Member'}
+      </PrimaryBtn>
     </Modal>
   );
 };

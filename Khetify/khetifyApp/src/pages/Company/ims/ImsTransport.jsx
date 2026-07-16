@@ -77,6 +77,19 @@ const ShipmentsTab = () => {
   const visible = view === 'incoming' ? rows.filter(isIncoming) : rows;
   const incomingCount = rows.filter(isIncoming).length;
 
+  // A warehouse-scoped user (Yogesh/Indore, Karan/Bhopal) needs to know which
+  // way a shipment is moving relative to THEIR warehouse — "To: Bhopal" alone
+  // doesn't tell Karan it's arriving. The main Company is unscoped, so it reads
+  // From → To and gets no badge. Compared by ID, never by name.
+  const mine = (warehouseIds || []).map(String);
+  const scoped = mine.length > 0;
+  const directionOf = (s) => {
+    if (!scoped) return null;
+    if (mine.includes(String(s.fromWarehouseId?._id || s.fromWarehouseId))) return 'Outgoing';
+    if (mine.includes(String(s.toWarehouseId?._id || s.toWarehouseId))) return 'Incoming';
+    return null;
+  };
+
   const doApprove = async (s) => {
     try { await approveShipment(s._id); toast('success', 'Shipment approved'); refresh(); } catch (err) { apiError(err); }
   };
@@ -103,12 +116,25 @@ const ShipmentsTab = () => {
         <PrimaryBtn onClick={() => setShowNew(true)}><span className="material-symbols-outlined text-base">local_shipping</span> New Shipment</PrimaryBtn>
       </div>
       <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
-        <table className="w-full text-left border-collapse min-w-[820px] resp-table">
-          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
+        <table className="w-full text-left border-collapse min-w-[940px] resp-table">
+          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>From</Th><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
           <tbody className="divide-y divide-stone-100">
-            {visible.map((s) => (
+            {visible.map((s) => {
+              const dir = directionOf(s);
+              return (
               <tr key={s._id} className="hover:bg-stone-50/40">
-                <td className="px-6 py-4 text-sm font-bold text-stone-900" data-label="To">{s.toLabel}</td>
+                {/* fromLabel/toLabel are denormalised onto the shipment at
+                    creation, so both warehouse names are already in the payload —
+                    no extra lookup needed. */}
+                <td className="px-6 py-4 text-sm text-stone-600" data-label="From">{s.fromLabel || '—'}</td>
+                <td className="px-6 py-4 text-sm font-bold text-stone-900" data-label="To">
+                  {s.toLabel}
+                  {dir && (
+                    <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full align-middle ${
+                      dir === 'Outgoing' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-700'
+                    }`}>{dir}</span>
+                  )}
+                </td>
                 <td className="px-6 py-4 text-xs text-stone-500" data-label="Type">{movementKind(s)}</td>
                 <td className="px-6 py-4 text-xs text-stone-500" data-label="Vehicle">{s.vehicleId?.regNo || s.vehicleNo || '—'}</td>
                 <td className="px-6 py-4" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[s.status] || 'bg-stone-100'}`}>{s.status}</span></td>
@@ -137,8 +163,9 @@ const ShipmentsTab = () => {
                   </div>
                 </td>
               </tr>
-            ))}
-            {visible.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-stone-400">{view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
+              );
+            })}
+            {visible.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-stone-400">{view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
           </tbody>
         </table>
       </div>

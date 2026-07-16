@@ -46,6 +46,15 @@ const unitSerialSchema = new mongoose.Schema(
 
     status: { type: String, enum: UNIT_STATUSES, default: "generated" },
 
+    // LABEL print-state — INDEPENDENT of the stock `status` above. A unit can be
+    // available in a warehouse (status "in_stock") yet still have an unprinted
+    // label (printed:false). Set ONLY by markPrinted(), so generating serials
+    // never marks them printed. The Labels page filters "Unprinted only" on this
+    // flag, not on status. Defaults false (existing rows backfilled from their
+    // print history — scripts/backfillUnitPrinted.js).
+    printed: { type: Boolean, default: false },
+    printedAt: { type: Date, default: null },
+
     currentLocationId: { type: mongoose.Schema.Types.ObjectId, ref: "Location", default: null },
     currentShipmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Shipment", default: null },
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },

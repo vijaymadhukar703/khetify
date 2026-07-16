@@ -98,6 +98,20 @@ export const MODULES = [
     feature: null,
   },
   {
+    // COMPANY WAREHOUSE ONLY — the warehouse's own Transfer History. `roles`
+    // pins it to those roles so the main Company (which holds every capability
+    // via "*") never sees a second history entry. Warehouse roles can't see the
+    // module above because they don't hold order:read.
+    key: 'warehouse-transfer-history',
+    title: 'Transfer History',
+    path: '/warehouse/transfer-history',
+    icon: 'history',
+    description: 'Transfers sent from or received by your warehouse',
+    capability: 'shipment:read',
+    roles: ['operations_manager', 'warehouse_manager', 'warehouse_operator'],
+    feature: null,
+  },
+  {
     key: 'analytics',
     title: 'Analytics',
     path: '/analytics',
@@ -154,3 +168,6 @@ export const ADMIN_ITEMS = [
   { title: 'Billing & Plans', path: '/billing', icon: 'credit_card', description: 'Subscription and invoices', capability: 'billing:manage' },
   { title: 'Support', path: '/support', icon: 'support_agent', description: 'Help and contact', capability: null },
 ];
+
+
+
