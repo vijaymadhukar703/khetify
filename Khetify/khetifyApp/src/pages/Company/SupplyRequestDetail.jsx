@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getSupplyOrderDetails } from '../../lib/imsApi';
 import BackButton from '../../Components/BackButton';
+import { usePermission } from '../../context/PermissionContext';
 
 // SUPPLY REQUEST DETAIL — read-only traceability for ONE request: what was
 // asked for, which PARENT LOTS it was allocated from, and the EXACT child unit
@@ -48,6 +49,11 @@ const Card = ({ title, subtitle, children }) => (
 
 const SupplyRequestDetail = () => {
   const { id } = useParams();
+  const { role } = usePermission();
+  // MAIN COMPANY view only. This detail page is shared — a Company Warehouse
+  // role reaches the same route via inventory:read — so the field-hiding below
+  // is gated on the role. Everyone else sees the page exactly as before.
+  const isMainCompany = role === 'company_admin';
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
 
@@ -95,9 +101,11 @@ const SupplyRequestDetail = () => {
           <Detail label="Destination" value={s.destination} />
           <Detail label="Product" value={(s.products || []).join(', ')} />
           <Detail label="Requested Qty" value={fmtNum(s.requestedQty)} />
-          <Detail label="Approved Qty" value={fmtNum(s.approvedQty)} />
-          <Detail label="Picked Qty" value={fmtNum(s.pickedQty)} />
-          <Detail label="Dispatched Qty" value={fmtNum(s.dispatchedQty)} />
+          {/* Approved / Picked / Dispatched Qty hidden for the Main Company view.
+              Display-only — the values remain in the API response. */}
+          {!isMainCompany && <Detail label="Approved Qty" value={fmtNum(s.approvedQty)} />}
+          {!isMainCompany && <Detail label="Picked Qty" value={fmtNum(s.pickedQty)} />}
+          {!isMainCompany && <Detail label="Dispatched Qty" value={fmtNum(s.dispatchedQty)} />}
           <Detail label="Received Qty" value={fmtNum(s.receivedQty)} />
           <Detail label="Request Date" value={fmtDate(s.requestDate)} />
           <Detail label="Transfer / Shipment Ref" value={s.shipmentRef} />
@@ -115,10 +123,11 @@ const SupplyRequestDetail = () => {
         <Card title="Parent Lots" subtitle="No source lot has been assigned to this request yet.">
           <p className="text-sm text-stone-400">Not assigned — a source lot is chosen when the request is approved.</p>
         </Card>
-      ) : lots.map((l, i) => <ParentLotCard key={i} lot={l} />)}
+      ) : lots.map((l, i) => <ParentLotCard key={i} lot={l} hideAllocation={isMainCompany} />)}
 
-      {/* 4 — Timeline (only when the shipment carries a history) */}
-      {(d.timeline || []).length > 0 && (
+      {/* 4 — Timeline (only when the shipment carries a history). Hidden entirely
+          for the Main Company view — no empty card is rendered. */}
+      {!isMainCompany && (d.timeline || []).length > 0 && (
         <Card title="Timeline">
           <div className="flex flex-wrap items-center gap-2">
             {d.timeline.map((t, i) => (
@@ -138,8 +147,10 @@ const SupplyRequestDetail = () => {
   );
 };
 
-/** One parent lot + the exact child units transferred from it (searchable, paged). */
-const ParentLotCard = ({ lot }) => {
+/** One parent lot + the exact child units transferred from it (searchable, paged).
+ *  hideAllocation (Main Company view) drops the Product / Source Warehouse /
+ *  Qty Allocated / Received Qty fields — the child-unit table is untouched. */
+const ParentLotCard = ({ lot, hideAllocation = false }) => {
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
 
@@ -160,10 +171,12 @@ const ParentLotCard = ({ lot }) => {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3 mb-4">
         <Detail label="Parent Lot No." value={<span className="font-mono text-xs">{lot.lotNumber}</span>} />
         <Detail label="Batch No." value={lot.mfgBatchNo} />
-        <Detail label="Product" value={lot.productName} />
-        <Detail label="Source Warehouse" value={lot.sourceWarehouse} />
-        <Detail label="Qty Allocated" value={fmtNum(lot.allocatedQty)} />
-        <Detail label="Received Qty" value={lot.receivedQty == null ? '—' : fmtNum(lot.receivedQty)} />
+        {/* Product / Source Warehouse / Qty Allocated / Received Qty hidden for
+            the Main Company view. Display-only — the API data is unchanged. */}
+        {!hideAllocation && <Detail label="Product" value={lot.productName} />}
+        {!hideAllocation && <Detail label="Source Warehouse" value={lot.sourceWarehouse} />}
+        {!hideAllocation && <Detail label="Qty Allocated" value={fmtNum(lot.allocatedQty)} />}
+        {!hideAllocation && <Detail label="Received Qty" value={lot.receivedQty == null ? '—' : fmtNum(lot.receivedQty)} />}
         <Detail label="Manufacturing Date" value={fmtDate(lot.mfgDate)} />
         <Detail label="Expiry Date" value={fmtDate(lot.expiryDate)} />
         <Detail label="Transfer Status" value={<span className="capitalize">{String(lot.status || '').replace(/_/g, ' ')}</span>} />
@@ -190,10 +203,12 @@ const ParentLotCard = ({ lot }) => {
             </p>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[820px]">
+              <table className={`w-full text-left border-collapse ${hideAllocation ? 'min-w-[720px]' : 'min-w-[820px]'}`}>
                 <thead>
                   <tr className="bg-stone-50 border-b border-stone-200">
-                    {['Child Serial', 'Parent Lot No.', 'Status', 'Picked At', 'Dispatched At', 'Received At', 'Owner'].map((h) => (
+                    {/* Received At column dropped for the Main Company view — the
+                        u.receivedAt data is untouched, just not shown. */}
+                    {['Child Serial', 'Parent Lot No.', 'Status', 'Picked At', 'Dispatched At', ...(hideAllocation ? [] : ['Received At']), 'Owner'].map((h) => (
                       <th key={h} className="px-4 py-2.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -210,12 +225,12 @@ const ParentLotCard = ({ lot }) => {
                       </td>
                       <td className="px-4 py-2.5 text-xs text-stone-500 whitespace-nowrap">{fmtDateTime(u.pickedAt)}</td>
                       <td className="px-4 py-2.5 text-xs text-stone-500 whitespace-nowrap">{fmtDateTime(u.dispatchedAt)}</td>
-                      <td className="px-4 py-2.5 text-xs text-stone-500 whitespace-nowrap">{fmtDateTime(u.receivedAt)}</td>
+                      {!hideAllocation && <td className="px-4 py-2.5 text-xs text-stone-500 whitespace-nowrap">{fmtDateTime(u.receivedAt)}</td>}
                       <td className="px-4 py-2.5 text-xs text-stone-500 capitalize">{u.owner || '—'}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-stone-400">No serial matches that search.</td></tr>
+                    <tr><td colSpan={hideAllocation ? 6 : 7} className="px-4 py-6 text-center text-sm text-stone-400">No serial matches that search.</td></tr>
                   )}
                 </tbody>
               </table>
