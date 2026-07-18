@@ -86,6 +86,11 @@ export const MODULES = [
     icon: 'shopping_cart',
     description: 'Create and fulfil customer orders',
     capability: 'order:read',
+    // Hidden from the MAIN COMPANY only. It holds "*" so a capability check
+    // can't hide it, and an allow-list would be brittle — every other role that
+    // holds order:read (sales_manager, pos_operator, support, …) keeps Orders.
+    // The module, its route and its APIs are untouched.
+    hideForRoles: ['company_admin'],
     feature: null,
   },
   {

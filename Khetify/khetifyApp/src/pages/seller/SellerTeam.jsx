@@ -10,6 +10,28 @@ import { useSellerPermission } from '../../context/SellerPermissionContext';
 
 const toast = (icon, title) => Swal.fire({ icon, title, toast: true, position: 'top-end', timer: 2200, showConfirmButton: false });
 const apiErr = (e) => toast('error', e?.response?.data?.message || e.message || 'Something went wrong');
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Validate the Invite Team Member form. Trims first (whitespace-only = empty),
+ *  matching the mandatory-field rule the seller API enforces server-side
+ *  (validators/userValidators.js → createSellerMemberBody). */
+const validateMember = (f, { warehouseRequired }) => {
+  const v = { name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), password: f.password.trim() };
+  const e = {};
+  if (!v.name) e.name = 'Name is required';
+  if (!v.email) e.email = 'Email is required';
+  else if (!EMAIL_RE.test(v.email)) e.email = 'Enter a valid email';
+  if (!v.phone) e.phone = 'Phone is required';
+  else if (!/^\d{10}$/.test(v.phone)) e.phone = 'Enter a valid 10-digit phone number';
+  if (!f.role) e.role = 'Role is required';
+  if (!v.password) e.password = 'Temporary Password is required';
+  else if (v.password.length < 6) e.password = 'Temporary Password must be at least 6 characters';
+  if (warehouseRequired && !f.whs.length) e.warehouse = 'Assigned Warehouse is required';
+  return e;
+};
+
+const FieldError = ({ msg }) => (msg ? <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {msg}</p> : null);
 const ROLE_LABEL = Object.fromEntries(SELLER_TEAM_ROLES.map((r) => [r.value, r.label]));
 const STATUS_STYLE = { active: 'bg-green-50 text-green-700', invited: 'bg-amber-50 text-amber-700', disabled: 'bg-stone-100 text-stone-500' };
 
@@ -96,21 +118,30 @@ const AddMemberModal = ({ warehouses, onClose, onDone }) => {
   // Role + warehouse start empty so the operator must actively pick both.
   const [f, setF] = useState({ name: '', email: '', phone: '', role: '', password: '' });
   const [whs, setWhs] = useState([]);
+  const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
-  const u = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const u = (k) => (e) => { setF({ ...f, [k]: e.target.value }); if (errors[k]) setErrors((p) => ({ ...p, [k]: undefined })); };
+
+  const warehouseRequired = warehouses.length > 0;
+  // Every visible field is mandatory — button stays disabled until each is
+  // non-empty; format errors surface on submit.
+  const canSubmit = !busy && !!(f.name.trim() && f.email.trim() && f.phone.trim() && f.role && f.password.trim()
+    && (!warehouseRequired || whs.length));
 
   const submit = async () => {
-    if (!f.name || !f.password || (!f.email && !f.phone)) { toast('error', 'Name, a contact (email/phone) and a password are required'); return; }
-    // Role must be chosen explicitly — an empty role would silently fall back to
-    // seller_staff on the backend (role || "seller_staff").
-    if (!f.role) { toast('error', 'Select a role'); return; }
-    if (warehouses.length > 0 && !whs.length) { toast('error', 'Select a warehouse'); return; }
+    const e = validateMember({ ...f, whs }, { warehouseRequired });
+    setErrors(e);
+    if (Object.keys(e).length) return;
     setBusy(true);
     try {
-      await createSellerMember({ ...f, warehouseIds: whs });
+      // Send trimmed values; all fields are required now.
+      await createSellerMember({
+        name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(),
+        role: f.role, password: f.password.trim(), warehouseIds: whs,
+      });
       toast('success', 'Team member added');
       onDone();
-    } catch (e) { apiErr(e); } finally { setBusy(false); }
+    } catch (e2) { apiErr(e2); } finally { setBusy(false); }
   };
 
   // UI mirrors the Company "Add Team Member" modal (pages/Company/CompanyUsers.jsx):
@@ -119,9 +150,17 @@ const AddMemberModal = ({ warehouses, onClose, onDone }) => {
   // and the invite/password logic are unchanged.
   return (
     <Modal title="Invite team member" onClose={onClose}>
-      <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /></Field>
-      <Field label="Email"><input className={inputCls} value={f.email} onChange={u('email')} /></Field>
-      <Field label="Phone"><input className={inputCls} value={f.phone} onChange={u('phone')} /></Field>
+      <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /><FieldError msg={errors.name} /></Field>
+      <Field label="Email *"><input className={inputCls} value={f.email} onChange={u('email')} /><FieldError msg={errors.email} /></Field>
+      <Field label="Phone *">
+        <input className={inputCls} type="tel" inputMode="numeric" maxLength={10} value={f.phone}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setF({ ...f, phone: digits });
+            if (errors.phone) setErrors((p) => ({ ...p, phone: undefined }));
+          }} />
+        <FieldError msg={errors.phone} />
+      </Field>
       {/* Dropdown stays ENABLED — Operations Manager is simply the only role a
           new member can be given. (An existing member's role can still be
           changed from the table.)
@@ -134,6 +173,7 @@ const AddMemberModal = ({ warehouses, onClose, onDone }) => {
           <option value="" disabled>Select role</option>
           <option value="seller_manager">Operations Manager</option>
         </select>
+        <FieldError msg={errors.role} />
       </Field>
       {warehouses.length > 0 && (
         // Same dropdown as the Company form's "Assigned Warehouse". Still stored
@@ -144,18 +184,20 @@ const AddMemberModal = ({ warehouses, onClose, onDone }) => {
           <select
             className={inputCls}
             value={whs[0] || ''}
-            onChange={(e) => setWhs(e.target.value ? [e.target.value] : [])}
+            onChange={(e) => { setWhs(e.target.value ? [e.target.value] : []); if (errors.warehouse) setErrors((p) => ({ ...p, warehouse: undefined })); }}
             required
           >
             <option value="" disabled>Select warehouse</option>
             {warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
           </select>
+          <FieldError msg={errors.warehouse} />
         </Field>
       )}
       <Field label="Temporary Password *">
         <input className={inputCls} type="text" value={f.password} onChange={u('password')} placeholder="They sign in with this" />
+        <FieldError msg={errors.password} />
       </Field>
-      <PrimaryBtn disabled={busy} onClick={submit}>
+      <PrimaryBtn disabled={!canSubmit} onClick={submit}>
         <span className="material-symbols-outlined text-base">person_add</span> {busy ? 'Adding…' : 'Add Member'}
       </PrimaryBtn>
     </Modal>

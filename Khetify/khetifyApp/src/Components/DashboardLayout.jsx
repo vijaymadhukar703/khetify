@@ -6,6 +6,7 @@ import NotificationBell from './ims/NotificationBell';
 import { MODULES, activeModule } from '../lib/nav';
 import { useSubscription, FEATURES } from '../context/SubscriptionContext';
 import { usePermission } from '../context/PermissionContext';
+import { isWarehouseRole } from '../lib/roles';
 import { disconnectSocket } from '../lib/socket';
 import { getCompany } from '../lib/imsApi';
 import SupportChatWidget from './support/SupportChatWidget';
@@ -34,7 +35,7 @@ const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const { has, plan, loading: subLoading } = useSubscription();
-  const { can, role, loading: permLoading } = usePermission();
+  const { can, role, loading: permLoading, name, companyName, warehouses } = usePermission();
   const isMainCompany = role === 'company_admin';
 
   // The company must be approved before the module sidebar is usable. Until then
@@ -59,12 +60,16 @@ const DashboardLayout = () => {
 
   // Same gating as the Hub: HIDE on capability (RBAC), LOCK on subscription.
   const imsActive = !subLoading && !!plan && plan !== 'free';
-  // HIDE on capability (RBAC) — plus an optional `roles` pin for modules that
-  // belong to specific roles only (e.g. the Company Warehouse's own Transfer
-  // History), so a wildcard role like company_admin doesn't also pick them up.
+  // HIDE on capability (RBAC), plus two optional role pins:
+  //  - `roles`        allow-list: only these roles see the module (e.g. the
+  //                   Company Warehouse's own Transfer History), so a wildcard
+  //                   role like company_admin doesn't also pick it up.
+  //  - `hideForRoles` deny-list: everyone EXCEPT these roles sees it (e.g.
+  //                   Orders, hidden from company_admin but kept for the rest).
   const visible = (m) =>
     !(m.capability && !permLoading && !can(m.capability)) &&
-    !(m.roles && !permLoading && !m.roles.includes(role));
+    !(m.roles && !permLoading && !m.roles.includes(role)) &&
+    !(m.hideForRoles && !permLoading && m.hideForRoles.includes(role));
   const locked = (m) => {
     if (m.feature === 'ims') return !imsActive;
     if (m.feature === FEATURES.API_ACCESS) return !has(FEATURES.API_ACCESS);
@@ -79,7 +84,23 @@ const DashboardLayout = () => {
     { to: '/faq', icon: 'quiz', title: 'FAQ' },
   ];
 
-  const userName = localStorage.getItem('userName') || 'User';
+  // The PERSON. Live from /auth/me; the login-time localStorage snapshot is only
+  // a fallback so the header doesn't flash "User" before the fetch resolves.
+  const userName = name || localStorage.getItem('userName') || 'User';
+
+  // The ORGANISATION under the name: a warehouse user works a warehouse, the
+  // main Company owns the business. Keyed off the role, never off which fields
+  // happen to be populated. Other company roles (sales_manager, …) pass no
+  // secondary and keep their single-line header exactly as before.
+  const orgName = isWarehouseRole(role)
+    ? warehouses.map((w) => w.name).filter(Boolean).join(', ') || null
+    : isMainCompany
+      ? companyName
+      : null;
+  // A company with no business name on file resolves to the account holder's own
+  // name — showing "Aakash / Aakash" would be noise, so drop the second line.
+  const secondary = orgName && orgName !== userName ? orgName : undefined;
+
   const logout = () => {
     disconnectSocket();
     localStorage.clear();
@@ -87,6 +108,7 @@ const DashboardLayout = () => {
   };
   const profile = {
     name: userName,
+    secondary,
     menuItems: [
       { icon: 'person', label: 'Profile', onClick: () => navigate('/profile') },
       // Administration + Settings only once the company is approved; an

@@ -6,6 +6,7 @@ import {
   getTransferRequests, createTransferRequest, acceptTransferRequest, rejectTransferRequest,
 } from '../../../lib/imsApi';
 import { usePermission } from '../../../context/PermissionContext';
+import { WAREHOUSE_ROLES } from '../../../lib/roles';
 import { Modal, Field, inputCls, PrimaryBtn, GhostBtn, Th } from './ImsUi';
 import { ManifestModal, ReceiveModal } from '../../../Components/ims/TransferModals';
 import { movementKind } from '../../../lib/movementLabel';
@@ -29,36 +30,69 @@ const getPos = () => new Promise((resolve) => {
   );
 });
 
+// Fleet admin (Vehicles / Drivers) and Exceptions are centrally managed, so
+// neither the MAIN COMPANY nor the COMPANY WAREHOUSE gets those tabs — both see
+// the shipment views only. Every other role keeps the full set. Nothing is
+// removed globally: the tab components, routes and APIs are untouched.
+const ALL_TABS = [
+  ['shipments', 'Shipments'], ['requests', 'Requests'],
+  ['vehicles', 'Vehicles'], ['drivers', 'Drivers'], ['exceptions', 'Exceptions'],
+];
+const SHIPMENT_TABS = ['shipments', 'requests'];
+
 const ImsTransport = () => {
+  const { role } = usePermission();
+  const restricted = role === 'company_admin' || WAREHOUSE_ROLES.has(role);
+  const tabs = restricted ? ALL_TABS.filter(([k]) => SHIPMENT_TABS.includes(k)) : ALL_TABS;
+
   const [tab, setTab] = useState('shipments');
+  // Never render a tab this role can't see (e.g. state left over from a role
+  // switch) — fall back to the first allowed one.
+  const active = tabs.some(([k]) => k === tab) ? tab : tabs[0][0];
+
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white font-sora">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center gap-1 border-b border-stone-200">
-          {[['shipments', 'Shipments'], ['requests', 'Requests'], ['vehicles', 'Vehicles'], ['drivers', 'Drivers'], ['exceptions', 'Exceptions']].map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)} className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px ${tab === k ? 'border-[#EA2831] text-[#EA2831]' : 'border-transparent text-stone-400 hover:text-stone-700'}`}>{l}</button>
+          {tabs.map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)} className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px ${active === k ? 'border-[#EA2831] text-[#EA2831]' : 'border-transparent text-stone-400 hover:text-stone-700'}`}>{l}</button>
           ))}
         </div>
-        {tab === 'shipments' && <ShipmentsTab />}
-        {tab === 'requests' && <RequestsTab />}
-        {tab === 'vehicles' && <VehiclesTab />}
-        {tab === 'drivers' && <DriversTab />}
-        {tab === 'exceptions' && <ExceptionsTab />}
+        {active === 'shipments' && <ShipmentsTab />}
+        {active === 'requests' && <RequestsTab />}
+        {active === 'vehicles' && <VehiclesTab />}
+        {active === 'drivers' && <DriversTab />}
+        {active === 'exceptions' && <ExceptionsTab />}
       </div>
     </div>
   );
 };
 
 /* ───────────── Shipments ───────────── */
+/**
+ * Which business flow raised this shipment — a small hint under the reference,
+ * read from the shipment's OWN refType/toType (already on the payload). Purely
+ * additive context; the Type column keeps showing Transfer/Sales as before.
+ */
+const sourceLabelOf = (s) => {
+  if (s.refType === 'TransferRequest' || s.refType === 'Transfer') return 'Warehouse Transfer';
+  if (s.refType === 'SupplyOrder') return s.toType === 'seller' ? 'Seller Supply' : 'Supply Request';
+  if (s.toType === 'seller') return 'Seller Supply';
+  return null;
+};
+
 const ShipmentsTab = () => {
   const [rows, setRows] = useState([]);
+  const [q, setQ] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [manifestInfo, setManifestInfo] = useState(null);
   const [verify, setVerify] = useState(null);
   const [view, setView] = useState('all'); // all | incoming
   // Warehouse-level access: the backend already scopes this list to the
   // user's assigned warehouses; warehouseIds drives the Incoming filter.
-  const { warehouseIds, can } = usePermission();
+  const { warehouseIds, can, role } = usePermission();
+  const isMainCompany = role === 'company_admin';
+  const isWarehouse = WAREHOUSE_ROLES.has(role);
   // company_admin is denied inventory:transfer (view-only on transfers), so the
   // transfer-initiation controls (warehouse New Shipment, dispatching a
   // transfer) are hidden from them; operations managers keep them.
@@ -74,8 +108,6 @@ const ShipmentsTab = () => {
   // DESTINATION side receives (admin/unscoped users pass both).
   const isMyOutgoing = (s) =>
     !warehouseIds?.length || !s.fromWarehouseId || warehouseIds.includes(String(s.fromWarehouseId?._id || s.fromWarehouseId));
-  const visible = view === 'incoming' ? rows.filter(isIncoming) : rows;
-  const incomingCount = rows.filter(isIncoming).length;
 
   // A warehouse-scoped user (Yogesh/Indore, Karan/Bhopal) needs to know which
   // way a shipment is moving relative to THEIR warehouse — "To: Bhopal" alone
@@ -89,6 +121,36 @@ const ShipmentsTab = () => {
     if (mine.includes(String(s.toWarehouseId?._id || s.toWarehouseId))) return 'Incoming';
     return null;
   };
+
+  // The direction FILTERS count by direction alone. isIncoming() above stays as
+  // the Receive Lot action gate — it also demands a receivable status
+  // (in_transit/arrived/verifying), which is exactly why the old count read
+  // "Incoming Transfers (0)" while incoming rows sat on screen.
+  const incomingRows = isWarehouse ? rows.filter((s) => directionOf(s) === 'Incoming') : rows.filter(isIncoming);
+  const outgoingRows = rows.filter((s) => directionOf(s) === 'Outgoing');
+  const views = isMainCompany
+    ? [['all', `All (${rows.length})`]]
+    : isWarehouse
+      ? [['all', `All (${rows.length})`], ['incoming', `Incoming Transfers (${incomingRows.length})`], ['outgoing', `Outgoing Transfers (${outgoingRows.length})`]]
+      : [['all', `All (${rows.length})`], ['incoming', `Incoming Transfers (${incomingRows.length})`]];
+  // Guards the data too, not just the buttons — a view a role can't select can
+  // never filter its table.
+  const inView = isMainCompany ? rows
+    : view === 'incoming' ? incomingRows
+      : view === 'outgoing' && isWarehouse ? outgoingRows
+        : rows;
+
+  // Search runs AFTER the direction views, so incoming/outgoing filtering and
+  // its counts are untouched — it only narrows what the chosen view already
+  // holds. Case-insensitive on a copy; the stored reference is never altered.
+  // Client-side by design: `ref` is derived from _id, so the server cannot index
+  // or regex it without a materialised column.
+  const needle = q.trim().toLowerCase();
+  const visible = needle
+    ? inView.filter((s) =>
+        [s.ref, s.fromName, s.toName, s.vehicleId?.regNo, s.vehicleNo]
+          .some((f) => (f || '').toLowerCase().includes(needle)))
+    : inView;
 
   const doApprove = async (s) => {
     try { await approveShipment(s._id); toast('success', 'Shipment approved'); refresh(); } catch (err) { apiError(err); }
@@ -104,31 +166,65 @@ const ShipmentsTab = () => {
 
   return (
     <>
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          {[['all', `All (${rows.length})`], ['incoming', `Incoming Transfers (${incomingCount})`]].map(([k, l]) => (
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Direction views answer "what is MY warehouse sending / receiving?" —
+              meaningless for the unscoped main Company (it owns every
+              warehouse), so it only shows the All view. */}
+          {views.map(([k, l]) => (
             <button key={k} onClick={() => setView(k)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${view === k ? 'bg-[#EA2831] border-[#EA2831] text-white' : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
               {l}
             </button>
           ))}
         </div>
-        <PrimaryBtn onClick={() => setShowNew(true)}><span className="material-symbols-outlined text-base">local_shipping</span> New Shipment</PrimaryBtn>
+        <div className="flex items-center gap-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search ref (SH-…), warehouse or vehicle…"
+            className="w-56 sm:w-72 border border-stone-200 rounded-lg text-sm px-3 py-2 bg-white focus:ring-[#EA2831]"
+          />
+          {/* Shipments are raised by the warehouse that physically ships — the main
+              Company's view is read-only oversight. Other roles keep the button. */}
+          {!isMainCompany && (
+            <PrimaryBtn onClick={() => setShowNew(true)}><span className="material-symbols-outlined text-base">local_shipping</span> New Shipment</PrimaryBtn>
+          )}
+        </div>
       </div>
-      <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
-        <table className="w-full text-left border-collapse min-w-[940px] resp-table">
-          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>From</Th><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
+      {/* The extra Ref column needs room: widen the sheet and let it scroll
+          horizontally on small screens rather than clipping (the wrapper was
+          overflow-hidden, which cut the table off instead of scrolling it). */}
+      <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[1120px] resp-table">
+          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>Shipment Ref.</Th><Th>From</Th><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
           <tbody className="divide-y divide-stone-100">
             {visible.map((s) => {
               const dir = directionOf(s);
               return (
               <tr key={s._id} className="hover:bg-stone-50/40">
-                {/* fromLabel/toLabel are denormalised onto the shipment at
-                    creation, so both warehouse names are already in the payload —
-                    no extra lookup needed. */}
-                <td className="px-6 py-4 text-sm text-stone-600" data-label="From">{s.fromLabel || '—'}</td>
+                {/* The reference the backend derives (shipmentService.shipmentRef)
+                    — the SAME value Transfer History and Supply Requests show, so
+                    an operator can match a row across all three. Never rebuilt
+                    here. Shown in full, no truncation. */}
+                <td className="px-4 py-4" data-label="Shipment Ref.">
+                  <span className="text-xs font-bold font-mono bg-stone-100 text-stone-700 px-2.5 py-1 rounded-full whitespace-nowrap">
+                    {s.ref || '—'}
+                  </span>
+                  {sourceLabelOf(s) && (
+                    <span className="block mt-1 text-[10px] font-bold uppercase tracking-wide text-stone-400">
+                      {sourceLabelOf(s)}
+                    </span>
+                  )}
+                </td>
+                {/* fromName/toName are resolved server-side from the shipment's
+                    warehouse RELATIONS (shipmentService.shipmentRoute) — never from
+                    the *Label strings, which carry business-flow text like
+                    "Warehouse (transfer)". Same resolution Transfer History uses,
+                    so the two views always agree. */}
+                <td className="px-6 py-4 text-sm text-stone-600" data-label="From">{s.fromName || '—'}</td>
                 <td className="px-6 py-4 text-sm font-bold text-stone-900" data-label="To">
-                  {s.toLabel}
+                  {s.toName || '—'}
                   {dir && (
                     <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full align-middle ${
                       dir === 'Outgoing' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-700'
@@ -165,11 +261,13 @@ const ShipmentsTab = () => {
               </tr>
               );
             })}
-            {visible.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-stone-400">{view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-stone-400">{needle ? `No shipment matches “${q.trim()}”.` : view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
           </tbody>
         </table>
       </div>
-      {showNew && <NewShipmentModal canTransfer={canTransfer} onClose={() => setShowNew(false)} onDone={() => { setShowNew(false); refresh(); }} />}
+      {/* Guarded on the role too, so the modal can never be opened for the main
+          Company through leftover/forced UI state — not just a hidden button. */}
+      {showNew && !isMainCompany && <NewShipmentModal canTransfer={canTransfer} onClose={() => setShowNew(false)} onDone={() => { setShowNew(false); refresh(); }} />}
       {manifestInfo && <ManifestModal info={manifestInfo} onClose={() => setManifestInfo(null)} />}
       {verify && <ReceiveModal shipment={verify} onClose={() => setVerify(null)} onDone={() => { setVerify(null); refresh(); }} />}
     </>
@@ -269,6 +367,7 @@ const REQ_STATUS_STYLES = {
  */
 const RequestsTab = () => {
   const [rows, setRows] = useState([]);
+  const [q, setQ] = useState('');
   const [showNew, setShowNew] = useState(false);
   const { warehouseIds, can } = usePermission();
   // Accepting a request creates a transfer shipment → needs inventory:transfer.
@@ -278,6 +377,16 @@ const RequestsTab = () => {
   useEffect(() => { refresh(); }, []);
 
   const mine = (whId) => !warehouseIds?.length || warehouseIds.includes(String(whId?._id || whId));
+
+  // Case-insensitive search across the transfer ref, product and both
+  // warehouses, so a row can be found by the SH-… seen in Transfer History.
+  // Read-only over what the API already returned — never alters the stored ref.
+  const needle = q.trim().toLowerCase();
+  const visible = needle
+    ? rows.filter((r) =>
+        [r.transferRef, r.productId?.productName, r.fromWarehouseId?.name, r.toWarehouseId?.name]
+          .some((f) => (f || '').toLowerCase().includes(needle)))
+    : rows;
   const decide = async (id, ok) => {
     try {
       // Accept runs a server-side stock check: if the source warehouse lacks
@@ -292,22 +401,40 @@ const RequestsTab = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{rows.length} request(s)</p>
-        <PrimaryBtn onClick={() => setShowNew(true)}>
-          <span className="material-symbols-outlined text-base">move_down</span> Request Stock
-        </PrimaryBtn>
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{visible.length} request(s)</p>
+        <div className="flex items-center gap-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search ref (SH-…), product or warehouse…"
+            className="w-56 sm:w-72 border border-stone-200 rounded-lg text-sm px-3 py-2 bg-white focus:ring-[#EA2831]"
+          />
+          <PrimaryBtn onClick={() => setShowNew(true)}>
+            <span className="material-symbols-outlined text-base">move_down</span> Request Stock
+          </PrimaryBtn>
+        </div>
       </div>
       <div className="border border-stone-200 rounded-2xl overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[760px] resp-table">
-          <thead><tr className="text-[10px] uppercase text-stone-400 bg-stone-50"><Th>Product</Th><Th right>Qty</Th><Th>From (source)</Th><Th>For (requester)</Th><Th>Status</Th><Th>Requested</Th><Th right>Actions</Th></tr></thead>
+        <table className="w-full text-left border-collapse min-w-[920px] resp-table">
+          <thead><tr className="text-[10px] uppercase text-stone-400 bg-stone-50"><Th>Product</Th><Th right>Qty</Th><Th>From (source)</Th><Th>For (requester)</Th><Th>Transfer Ref.</Th><Th>Status</Th><Th>Requested</Th><Th right>Actions</Th></tr></thead>
           <tbody className="divide-y divide-stone-100">
-            {rows.map((r) => (
+            {visible.map((r) => (
               <tr key={r._id} className="hover:bg-stone-50/40">
                 <td className="px-4 py-3 text-sm font-bold" data-label="Product">{r.productId?.productName || '—'}</td>
                 <td className="px-4 py-3 text-sm text-right" data-label="Qty">{r.qty}</td>
                 <td className="px-4 py-3 text-sm" data-label="From (source)">{r.fromWarehouseId?.name || '—'}</td>
                 <td className="px-4 py-3 text-sm" data-label="For (requester)">{r.toWarehouseId?.name || '—'}{r.requestedBy?.name ? <span className="text-xs text-stone-400"> · {r.requestedBy.name}</span> : null}</td>
+                {/* The reference of the shipment this request created — the exact
+                    SH-… shown in Transfer History (server-supplied `transferRef`,
+                    never rebuilt here). "Not created" until a shipment exists; a
+                    request has at most one shipment, so no +N case. Shown in full,
+                    monospace, no truncation. */}
+                <td className="px-4 py-3" data-label="Transfer Ref.">
+                  {r.transferRef
+                    ? <span className="text-xs font-bold font-mono bg-stone-100 text-stone-700 px-2.5 py-1 rounded-full whitespace-nowrap">{r.transferRef}</span>
+                    : <span className="text-xs text-stone-400">Not created</span>}
+                </td>
                 <td className="px-4 py-3" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${REQ_STATUS_STYLES[r.status] || 'bg-stone-100 text-stone-500'}`}>{r.status}</span></td>
                 <td className="px-4 py-3 text-xs text-stone-400" data-label="Requested">{fmtDate(r.createdAt)}</td>
                 <td className="px-4 py-3 cell-actions">
@@ -337,7 +464,7 @@ const RequestsTab = () => {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-stone-400">No stock requests yet. Use "Request Stock" to ask another warehouse for inventory.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-stone-400">{needle ? `No request matches “${q.trim()}”.` : 'No stock requests yet. Use "Request Stock" to ask another warehouse for inventory.'}</td></tr>}
           </tbody>
         </table>
       </div>

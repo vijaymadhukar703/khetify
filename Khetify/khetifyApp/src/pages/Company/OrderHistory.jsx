@@ -9,11 +9,14 @@ import { usePermission } from '../../context/PermissionContext';
 // product and status; each row expands to its status timeline.
 //
 // MAIN COMPANY (role "company_admin") sees this page as "TRANSFER HISTORY":
-// only warehouse-transfer records are listed, with transfer-specific cards,
-// no type filter, and pagination. Every OTHER role (sales_manager,
-// pos_operator, support, …) keeps the original full Order History unchanged.
-// No backend data or API is removed — the transfer view is a client-side
-// projection of the SAME getOrderHistory response.
+// only actual warehouse stock MOVEMENTS are listed (SH-* shipments), with
+// transfer-specific cards, no type filter, and pagination. The TR-* transfer
+// REQUESTS that authorise those movements are excluded server-side via
+// excludeRequests — they are not a second movement, and they already have a
+// home in Operations → Shipment Tracking & Transfers → Requests. Every OTHER
+// role (sales_manager, pos_operator, support, …) keeps the original full Order
+// History unchanged: no flag is sent, so all three sources still come back.
+// No backend data or API is removed.
 
 // Two user-facing terms only: internal warehouse moves => "Transfer", anything
 // with an outside party => "Sales". Used as a fallback when a row doesn't carry
@@ -39,11 +42,31 @@ const isTransfer = (r) => kindLabel(r) === 'Transfer';
 // arrived/received/delivered/cancelled). Mapped to summary buckets.
 const RECEIVED_STATUSES = new Set(['received', 'delivered', 'fulfilled', 'completed']);
 const CLOSED_STATUSES = new Set(['cancelled', 'rejected', 'exception', 'returned']);
-// Transfer statuses offered in the Company status filter (both sources).
-const TRANSFER_STATUSES = [
-  'requested', 'accepted', 'planned', 'dispatched', 'in_transit', 'arrived',
-  'partially_received', 'received', 'delivered', 'fulfilled', 'rejected', 'cancelled',
+// MAIN COMPANY status filter — two BUCKETS, not raw pipeline values.
+//
+// These are the same two groupings the summary cards above the table already
+// use ("In Transit", "Received / Completed"), so picking one narrows the table to
+// exactly what its card counts. Matching on the literal statuses instead would
+// make the "In Transit: 5" card filter down to 2 (only rows sitting on the exact
+// `in_transit` step), which reads as a bug.
+//
+// Bucketing is also what lets the granular options go without hiding rows: a
+// `dispatched` or `arrived` transfer is still reachable under In Transit, and
+// `delivered` / `partially_received` under Received. Only CLOSED rows
+// (cancelled/rejected/exception/returned) sit outside both buckets — by design,
+// since the Cancelled option was dropped — and stay reachable via All statuses.
+const MAIN_COMPANY_STATUS_FILTERS = [
+  ['in_transit', 'In Transit'],
+  ['received', 'Received'],
 ];
+
+/** Does a row fall in the chosen Company bucket? Empty bucket = All statuses. */
+const matchesStatusBucket = (r, bucket) => {
+  if (!bucket) return true;
+  if (bucket === 'received') return RECEIVED_STATUSES.has(r.status);
+  if (bucket === 'in_transit') return !RECEIVED_STATUSES.has(r.status) && !CLOSED_STATUSES.has(r.status);
+  return true;
+};
 // Original order statuses (unchanged) for every non-company role.
 const ORDER_STATUSES = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned'];
 
@@ -59,7 +82,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-di
 const PAGE_SIZE = 10; // Company Transfer History pagination
 
 const OrderHistory = () => {
-  const { role } = usePermission();
+  const { role, loading: permLoading } = usePermission();
   const isMainCompany = role === 'company_admin';
 
   const [rows, setRows] = useState([]);
@@ -78,6 +101,20 @@ const OrderHistory = () => {
   // it can run from the mount effect without synchronous setState.
   const fetchHistory = (f) => {
     const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v));
+    // Transfer History lists actual stock movements (SH-*) only. The TR-*
+    // request rows are the authorisation for a move, not a second move, and are
+    // already listed under Operations → Shipment Tracking & Transfers →
+    // Requests. Order History (every other role) is unaffected — no flag, so the
+    // response still carries all three sources.
+    if (isMainCompany) {
+      params.excludeRequests = 1;
+      // The Company's two options are BUCKETS, resolved client-side against the
+      // full transfer set (see matchesStatusBucket). The API's ?status= is an
+      // exact match, so forwarding "in_transit" would drop every dispatched /
+      // arrived row that belongs in that bucket. Order History (other roles)
+      // still sends status and keeps its exact-match behaviour.
+      delete params.status;
+    }
     return getOrderHistory(params)
       .then((r) => setRows(r?.data || []))
       .catch(() => setRows([]))
@@ -93,7 +130,11 @@ const OrderHistory = () => {
     fetchHistory(filters);
   };
 
-  useEffect(() => { fetchHistory({}); }, []);
+  // Wait for the role before the first load — `isMainCompany` decides whether
+  // the request carries excludeRequests, and fetching while it is still false
+  // would populate Transfer History with the TR-* rows this view excludes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!permLoading) fetchHistory({}); }, [permLoading]);
   useEffect(() => { getWarehouses().then((r) => setWarehouses(r?.data || r || [])).catch(() => {}); }, []);
 
   // Original totals (non-company roles) — every kind of record.
@@ -105,7 +146,7 @@ const OrderHistory = () => {
 
   // Company transfer view — the full filtered dataset of transfer records only.
   const transferRows = useMemo(
-    () => rows.filter(isTransfer).filter((r) => !applied.status || r.status === applied.status),
+    () => rows.filter(isTransfer).filter((r) => matchesStatusBucket(r, applied.status)),
     [rows, applied.status]
   );
 
@@ -178,9 +219,15 @@ const OrderHistory = () => {
         )}
         <select className={inputCls} value={filters.status} onChange={set('status')}>
           <option value="">All statuses</option>
-          {(isMainCompany ? TRANSFER_STATUSES : ORDER_STATUSES).map((s) => (
-            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-          ))}
+          {/* Company: the two summary buckets, explicitly labelled. Every other
+              role keeps the original raw order statuses, unchanged. */}
+          {isMainCompany
+            ? MAIN_COMPANY_STATUS_FILTERS.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))
+            : ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+              ))}
         </select>
         <select className={inputCls} value={filters.warehouseId} onChange={set('warehouseId')}>
           <option value="">All warehouses</option>
