@@ -66,6 +66,37 @@ const inventorySchema = new mongoose.Schema(
     // ABC velocity class (A=fast/high-value … C=slow). Set by the nightly
     // classifyABC job; drives cycle-count frequency guidance.
     abcClass: { type: String, enum: ["A", "B", "C", null], default: null },
+
+    // ── ORIGINAL LOT REGISTER — IMMUTABLE, WRITE-ONCE ─────────────────────
+    // Every other quantity above is a running balance that transfers, picks,
+    // sales, returns and reservations move. These two are not: they record what
+    // the lot WAS at creation, and nothing in the stock lifecycle may touch them
+    // afterwards. The Main Company Inventory register reads them so a lot created
+    // at 3000 still reads 3000 after 300 has moved to another warehouse — the
+    // live 2700 stays correct on the Warehouse/Seller views, which read
+    // availableStock as before.
+    //
+    // Written ONLY via $setOnInsert in lotService.receiveLot (so a re-receive
+    // into the same lot row cannot overwrite the first value) and once by
+    // scripts/migrations/005-original-lot-quantity.js for pre-existing rows.
+    // NEVER add these to a $set/$inc in a movement path.
+    originalQuantity: { type: Number, default: null },
+
+    // How this row came into existence — a provenance stamp, not a status:
+    //   company   — the Main Company minted the lot (role company_admin)
+    //   warehouse — a Company Warehouse stocked it in via Receive Lot
+    //   grn       — created by posting a GRN
+    //   transfer  — a warehouse→warehouse transfer LANDED here. This row is a
+    //               destination copy carrying the source's lot identity, not an
+    //               original lot, so the Company register must exclude it.
+    //   unknown   — pre-migration row whose origin could not be proven from the
+    //               ledger. Flagged for review; never guessed at.
+    // The Company register filters on "company" — see lotService.getLots.
+    lotOrigin: {
+      type: String,
+      enum: ["company", "warehouse", "grn", "transfer", "unknown", null],
+      default: null,
+    },
   },
   { timestamps: true }
 );

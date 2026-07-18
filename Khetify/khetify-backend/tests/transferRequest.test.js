@@ -144,3 +144,44 @@ describe("transfer-request acceptance with stock verification", () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe("transfer-request list — Transfer Ref. column", () => {
+  const { shipmentRef } = require("../services/shipmentService");
+
+  test("an unfulfilled request has transferRef null (UI shows 'Not created')", async () => {
+    await makeRequest(10);
+
+    const res = mockRes();
+    await ctrl.list({ query: {}, user: adminUser() }, res);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].transferRef).toBeNull();
+  });
+
+  test("an accepted request exposes the SAME ref its shipment shows in Transfer History", async () => {
+    await lotService.receiveLot({ ownerId: companyId, productId, warehouseId: source._id, batchNumber: "L1", qty: 100 });
+    const doc = await makeRequest(10);
+    await ctrl.accept({ params: { id: doc._id }, body: {}, user: opsUser() }, mockRes());
+
+    const res = mockRes();
+    await ctrl.list({ query: {}, user: adminUser() }, res);
+
+    const row = res.body.data.find((r) => String(r._id) === String(doc._id));
+    const ship = await Shipment.findById((await TransferRequest.findById(doc._id)).shipmentId);
+    // The reference derives from the linked shipment, never guessed or built
+    // from status text — identical to what Transfer History renders.
+    expect(row.transferRef).toBe(shipmentRef(ship));
+    expect(row.transferRef).toMatch(/^SH-[0-9A-F]{6}$/);
+  });
+
+  test("existing populated fields are untouched (additive change only)", async () => {
+    await makeRequest(10);
+    const res = mockRes();
+    await ctrl.list({ query: {}, user: adminUser() }, res);
+    const row = res.body.data[0];
+    expect(row.productId?.productName).toBeTruthy();
+    expect(row.fromWarehouseId?.name).toBeTruthy();
+    expect(row.toWarehouseId?.name).toBeTruthy();
+    expect(row.status).toBe("requested");
+  });
+});

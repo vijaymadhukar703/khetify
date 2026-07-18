@@ -251,11 +251,21 @@ exports.updateStatus = async (req, res) => {
  * not touch existing /api/orders routes or response shapes.
  *
  * Query: from, to (placedAt/createdAt window), type (seller|transfer|shipment),
- *        status, warehouseId, sellerId, productId, q (free text), limit.
+ *        status, warehouseId, sellerId, productId, q (free text), limit,
+ *        excludeRequests (1 = actual stock movements only, see below).
+ *
+ * excludeRequests — OPT-IN, default off, so every existing caller is unchanged.
+ * A warehouse-to-warehouse move is stored as TWO records: a TransferRequest
+ * (the authorisation, TR-*) and the Shipment created when it is fulfilled (the
+ * physical movement, SH-*). A history that lists both shows one movement twice
+ * and double-counts its value. Callers that want movements only — the Company
+ * and Warehouse "Transfer History" views, whose TR-* rows already live in
+ * Operations → Shipment Tracking & Transfers → Requests — pass this flag.
  */
 const TransferRequest = require("../../model/Transport/TransferRequest");
 const Shipment = require("../../model/Transport/Shipment");
 const { warehouseScope } = require("../../services/warehouseScope");
+const { shipmentRef } = require("../../services/shipmentService");
 
 // Condense a list of item names / lot numbers into one cell value:
 // "—" when empty, the single value, or "First +N more" for multiple distinct.
@@ -302,6 +312,12 @@ exports.getHistory = async (req, res) => {
     if (warehouseOnly && !scoped) {
       return res.json({ success: true, count: 0, data: [] });
     }
+    // Actual stock movements only — drops the TransferRequest (TR-*) source.
+    // Applied at the QUERY, not on the response: the union below is capped at
+    // `limit`, so filtering these rows out client-side would let request rows
+    // evict real shipments from the list.
+    const excludeRequests =
+      req.query.excludeRequests === "1" || req.query.excludeRequests === "true";
     // Honour an explicit ?warehouseId, but never outside the caller's scope.
     const whFilter = scoped
       ? (warehouseId && scope.map(String).includes(String(warehouseId)) ? [warehouseId] : scope)
@@ -349,8 +365,8 @@ exports.getHistory = async (req, res) => {
       }
     }
 
-    // 2) Warehouse transfers
-    if (!type || type === "transfer") {
+    // 2) Warehouse transfer REQUESTS (authorisation records, not movements).
+    if (!excludeRequests && (!type || type === "transfer")) {
       const f = { companyId };
       if (productId) f.productId = productId;
       if (whOr) f.$or = whOr;
@@ -416,7 +432,9 @@ exports.getHistory = async (req, res) => {
           // shipment as "Transfer" vs a customer/vendor one as "Sales". The enum
           // value itself is unchanged.
           toType: s.toType,
-          ref: s.lrNumber || `SH-${String(s._id).slice(-6).toUpperCase()}`,
+          // Same helper the Shipments list uses, so a row here and a row there
+          // always read the same reference. Output is unchanged.
+          ref: shipmentRef(s),
           party: `${s.fromWarehouseId?.name || "?"} → ${s.toWarehouseId?.name || "?"}`,
           from: s.fromWarehouseId?.name || s.fromLabel || "—",
           to: s.toWarehouseId?.name || s.toLabel || "—",

@@ -378,7 +378,7 @@ exports.getSupplyOrderDetails = async (req, res) => {
           receivedQty,
           requestDate: order.createdAt,
           status: order.status,
-          shipmentRef: shipment ? (shipment.lrNumber || `SH-${String(shipment._id).slice(-6).toUpperCase()}`) : null,
+          shipmentRef: shipmentService.shipmentRef(shipment),
         },
         parentLots,
         timeline: (shipment?.statusHistory || []).map((e) => ({ status: e.status, at: e.at })),

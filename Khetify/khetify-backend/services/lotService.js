@@ -83,12 +83,19 @@ const POPULATE_PRODUCT = {
  * warehouse. Owner-aware: defaults to ownerType "company" so the existing
  * company caller is unchanged; sellers pass ownerType "seller".
  */
-async function getLots(ownerId, { ownerType = "company", productId, warehouseId, warehouseIds, expiring, expired, excludePending = false } = {}) {
+async function getLots(ownerId, { ownerType = "company", productId, warehouseId, warehouseIds, expiring, expired, excludePending = false, lotOrigin } = {}) {
   const filter = {
     ownerType,
     ownerId,
     batchNumber: { $ne: null },
   };
+  // ORIGINAL LOT REGISTER (Main Company Inventory) — opt-in, off by default, so
+  // every existing caller keeps the full live list. `lotOrigin: "company"` keeps
+  // only lots the Main Company actually minted and drops the destination rows a
+  // warehouse→warehouse transfer lands (those copy the source's lot identity
+  // verbatim, so they are otherwise indistinguishable), plus warehouse/GRN-created
+  // lots and unmigrated rows.
+  if (lotOrigin) filter.lotOrigin = lotOrigin;
   // A warehouse must not see (or count) stock it hasn't received yet: hide rows
   // that are purely awaiting receipt (nothing on the books, qty still in
   // transit). A row with some received stock AND more incoming still shows.
@@ -268,6 +275,12 @@ async function receiveLot({
   // and Confirm Receive (confirmLotReceipt) before it becomes available. GRN
   // posting and every other caller leave this false — a GRN *is* the receipt.
   pendingReceipt = false,
+  // Provenance of the row this call may INSERT (Inventory.lotOrigin): "company"
+  // when the Main Company mints the lot, "warehouse" for a Company Warehouse
+  // Receive Lot, "grn" for a GRN posting. Only "company" rows appear on the Main
+  // Company original-lot register. Defaults to "unknown" rather than guessing —
+  // an unlabelled row is reviewable, a mislabelled one is invisible.
+  lotOrigin = "unknown",
 }) {
   if (!productId || !qty || qty <= 0) {
     const err = new Error("productId, batchNumber and positive qty are required");
@@ -303,6 +316,12 @@ async function receiveLot({
   if (mfgDate) setFields.mfgDate = mfgDate;
   if (typeof lowStockThreshold === "number") setFields.lowStockThreshold = lowStockThreshold;
 
+  // ORIGINAL LOT REGISTER (immutable). $setOnInsert — never $set — so these are
+  // written only when this call actually CREATES the row. receiveLot upserts on
+  // the lot identity, so a second receive into the same lot adds stock but must
+  // leave the original creation figures alone.
+  const insertOnlyFields = { originalQuantity: qty, lotOrigin };
+
   const core = async (s) => {
     // Capacity guard: this lot's qty must fit within the destination warehouse's
     // remaining space. Checked inside the txn so it sees earlier lines' stock-in
@@ -324,7 +343,11 @@ async function receiveLot({
     if (pendingReceipt) {
       const pending = await Inventory.findOneAndUpdate(
         { productId, ownerType: "company", ownerId, warehouseId, batchNumber },
-        { $inc: { inTransitStock: qty }, $set: { ...setFields, receivedAt: null, receivedBy: null } },
+        {
+          $inc: { inTransitStock: qty },
+          $set: { ...setFields, receivedAt: null, receivedBy: null },
+          $setOnInsert: insertOnlyFields,
+        },
         { new: true, upsert: true, session: s }
       );
       return pending;
@@ -332,7 +355,11 @@ async function receiveLot({
 
     const doc = await Inventory.findOneAndUpdate(
       { productId, ownerType: "company", ownerId, warehouseId, batchNumber },
-      { $inc: { offlineStock: qty, availableStock: qty }, $set: setFields },
+      {
+        $inc: { offlineStock: qty, availableStock: qty },
+        $set: setFields,
+        $setOnInsert: insertOnlyFields,
+      },
       { new: true, upsert: true, session: s }
     );
     await ledger(doc, {
