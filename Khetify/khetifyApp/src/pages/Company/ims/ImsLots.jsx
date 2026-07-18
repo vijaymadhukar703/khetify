@@ -35,7 +35,25 @@ const apiError = (err) =>
  * inTransitStock back to 0 — so this reads identically for them.
  */
 const lotQty = (l) => Number(l.availableStock || 0) + Number(l.inTransitStock || 0);
-const stockStatusOf = (l) => statusOf({ stock: lotQty(l), reorderLevel: l.lowStockThreshold || 0 });
+
+/**
+ * ORIGINAL LOT REGISTER (Main Company only, `originalRegister`): the quantity the
+ * lot was CREATED with — Inventory.originalQuantity, an immutable field written
+ * once at creation. Deliberately NOT lotQty(): a lot created at 3000 that has since
+ * sent 300 to another warehouse reads 2700 live, and the Company register must
+ * still say 3000. Live stock stays correct on the Warehouse/Seller views, which
+ * never pass this flag.
+ *
+ * Falls back to null (rendered "—") rather than to live stock: a row the migration
+ * could not prove must read as unknown, never as a wrong-but-plausible number.
+ */
+const originalQty = (l) => (typeof l.originalQuantity === 'number' ? l.originalQuantity : null);
+const qtyFor = (l, original) => (original ? originalQty(l) : lotQty(l));
+const statusFor = (l, original) => {
+  const stock = qtyFor(l, original);
+  if (stock === null) return null;
+  return statusOf({ stock, reorderLevel: l.lowStockThreshold || 0 });
+};
 
 const PAGE_SIZE = 10; // Company Lots pagination — lots per page
 
@@ -62,11 +80,18 @@ const PAGE_SIZE = 10; // Company Lots pagination — lots per page
  *   receiveTransfer — Company Warehouse only: "Receive Lot" scans an incoming
  *                     PARENT LOT and confirms the transfer (stock arrives here)
  *                     instead of stocking in a brand-new lot.
+ *   originalRegister— MAIN COMPANY only: render as the ORIGINAL LOT REGISTER —
+ *                     list only lots the Company itself minted (lotOrigin
+ *                     "company", so transfer-landed destination copies, warehouse
+ *                     Receive-Lot and GRN lots are excluded) and read the
+ *                     immutable originalQuantity instead of live stock. Off for
+ *                     every other role, so the Company Warehouse view keeps
+ *                     showing live balances exactly as before.
  */
 const ImsLots = ({
   showSummary = false, showStockStatus = false, hideReceive = false,
   paginate = false, showBatchNo = false, fluid = false, requireWarehouse = false,
-  hideCreate = false, receiveTransfer = false,
+  hideCreate = false, receiveTransfer = false, originalRegister = false,
 } = {}) => {
   const navigate = useNavigate();
   const [lots, setLots] = useState([]);
@@ -82,7 +107,9 @@ const ImsLots = ({
   const [modal, setModal] = useState(null); // { type: 'receive'|'transfer'|'label', lot? }
 
   const refresh = () =>
-    getLots()
+    // The register asks the API for Company-minted lots only; every other caller
+    // sends no filter and gets the full live list, unchanged.
+    getLots(originalRegister ? { lotOrigin: 'company' } : {})
       .then((res) => res?.success && setLots(res.data))
       .catch(apiError)
       .finally(() => setLoading(false));
@@ -101,9 +128,9 @@ const ImsLots = ({
     let out = showSummary ? lots.slice() : lots.filter((l) => l.availableStock > 0);
     if (filter === 'expiring') out = out.filter((l) => { const d = daysToExpiry(l.expiryDate); return d !== null && d >= 0 && d <= 90; });
     else if (filter === 'expired') out = out.filter((l) => daysToExpiry(l.expiryDate) < 0);
-    if (showStockStatus && stockFilter !== 'all') out = out.filter((l) => stockStatusOf(l) === stockFilter);
+    if (showStockStatus && stockFilter !== 'all') out = out.filter((l) => statusFor(l, originalRegister) === stockFilter);
     return out;
-  }, [lots, filter, stockFilter, showSummary, showStockStatus]);
+  }, [lots, filter, stockFilter, showSummary, showStockStatus, originalRegister]);
 
   // Company summary — reuse the SAME shared helper the dashboard uses, over the
   // SAME lot dataset, so the numbers can never disagree. No dummy/duplicated maths.
@@ -113,12 +140,15 @@ const ImsLots = ({
         const p = l.productId || {};
         return {
           id: l._id,
-          stock: lotQty(l),
+          // Register: the ORIGINAL created quantity, so "Units in Stock" and
+          // "Total Stock Value" describe the lots as created, not as they stand
+          // now. An unproven row contributes 0 rather than a guess.
+          stock: qtyFor(l, originalRegister) ?? 0,
           reorderLevel: l.lowStockThreshold || 0,
           price: p.mrp || 0,
         };
       }),
-    [lots]
+    [lots, originalRegister]
   );
   const summary = useMemo(() => computeInventorySummary(rows), [rows]);
 
@@ -230,10 +260,12 @@ const ImsLots = ({
                 {paged.map((lot) => {
                   const p = lot.productId || {};
                   const badge = expiryBadge(lot.expiryDate);
-                  const stock = stockStatusOf(lot);
+                  const qty = qtyFor(lot, originalRegister);
+                  const stock = statusFor(lot, originalRegister);
                   const stockCls =
                     stock === STATUS.IN ? 'bg-green-50 text-green-700'
                     : stock === STATUS.LOW ? 'bg-orange-50 text-orange-600'
+                    : stock === null ? 'bg-stone-100 text-stone-500'
                     : 'bg-red-50 text-red-600';
                   return (
                     <tr key={lot._id} className="hover:bg-stone-50/30 transition-colors">
@@ -255,7 +287,7 @@ const ImsLots = ({
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Mfg">{fmtDate(lot.mfgDate)}</td>
                       <td className="px-6 py-5 text-sm text-stone-500 font-medium" data-label="Expiry">{fmtDate(lot.expiryDate)}</td>
                       <td className="px-6 py-5 text-sm text-stone-900 font-bold" data-label="Qty">
-                        {lotQty(lot).toLocaleString('en-IN')}
+                        {qty === null ? '—' : qty.toLocaleString('en-IN')}
                         {/* Only ever set on a lot the destination warehouse hasn't
                             confirmed yet — a warehouse never sees these rows. */}
                         {lot.inTransitStock > 0 && (
@@ -266,7 +298,7 @@ const ImsLots = ({
                       </td>
                       {showStockStatus && (
                         <td className="px-6 py-5" data-label="Stock Status">
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${stockCls}`}>{stock}</span>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${stockCls}`}>{stock ?? 'Unknown'}</span>
                         </td>
                       )}
                       <td className="px-6 py-5" data-label={showStockStatus ? 'Expiry Status' : 'Status'}>

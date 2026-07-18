@@ -79,8 +79,20 @@ exports.list = async (req, res) => {
     const filter = { companyId: req.user.companyId };
     if (req.query.status) filter.status = req.query.status;
     if (scope) filter.$or = [{ fromWarehouseId: { $in: scope } }, { toWarehouseId: { $in: scope } }];
-    const rows = await TransferRequest.find(filter).populate(POPULATE).sort({ createdAt: -1 }).limit(300);
-    res.json({ success: true, count: rows.length, data: rows });
+    const rows = await TransferRequest.find(filter)
+      .populate(POPULATE)
+      // The shipment this request was fulfilled by — a one-to-one link
+      // (TransferRequest.shipmentId, set by accept()). Needed only for its
+      // reference; lrNumber is what shipmentRef() falls back from.
+      .populate("shipmentId", "lrNumber")
+      .sort({ createdAt: -1 }).limit(300).lean();
+    // ADDITIVE: `transferRef` — the SH-… of the linked shipment, the SAME value
+    // Transfer History shows (shipmentService.shipmentRef is the one definition,
+    // so the two can never drift). null until a shipment exists → the UI reads
+    // "Not created". Every existing field, including the populated shipmentId the
+    // UI already uses as a truthy "shipment created" flag, is passed through.
+    const data = rows.map((r) => ({ ...r, transferRef: shipmentService.shipmentRef(r.shipmentId) }));
+    res.json({ success: true, count: data.length, data });
   } catch (e) { fail(res, e); }
 };
 

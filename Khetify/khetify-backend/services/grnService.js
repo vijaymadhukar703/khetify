@@ -223,6 +223,9 @@ async function postGRN(companyId, grnId, { performedBy } = {}) {
           refType: "GRN",
           refId: grn._id,
           note: `GRN ${grn.grnNumber} line ${i + 1}`,
+          // A GRN receipt is not a Main-Company-minted lot — it stays off the
+          // original-lot register while keeping its live stock as before.
+          lotOrigin: "grn",
           session,
         });
         tasks.push({ line, lineIndex: i, inventoryId: inv._id, productId: line.productId, qty: accepted });

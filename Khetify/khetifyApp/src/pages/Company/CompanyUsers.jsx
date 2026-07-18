@@ -155,27 +155,56 @@ const CompanyUsers = () => {
   );
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Validate the Add Team Member form. Trims first (whitespace-only = empty), so
+ *  the field-level messages match the mandatory-field rule the backend enforces
+ *  in validators/userValidators.js. Returns an errors map (empty = valid). */
+const validateMember = (f, { warehouseRequired }) => {
+  const v = { name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), password: f.password.trim() };
+  const e = {};
+  if (!v.name) e.name = 'Name is required';
+  if (!v.email) e.email = 'Email is required';
+  else if (!EMAIL_RE.test(v.email)) e.email = 'Enter a valid email';
+  if (!v.phone) e.phone = 'Phone is required';
+  else if (!/^\d{10}$/.test(v.phone)) e.phone = 'Enter a valid 10-digit phone number';
+  if (!f.role) e.role = 'Role is required';
+  if (!v.password) e.password = 'Temporary Password is required';
+  else if (v.password.length < 6) e.password = 'Temporary Password must be at least 6 characters';
+  if (warehouseRequired && !f.warehouseId) e.warehouseId = 'Assigned Warehouse is required';
+  return e;
+};
+
+const FieldError = ({ msg }) => (msg ? <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {msg}</p> : null);
+
 const AddUserModal = ({ onClose, onDone }) => {
   // Role + warehouse start empty so the operator must actively pick both.
   const [f, setF] = useState({ name: '', email: '', phone: '', role: '', password: '', warehouseId: '' });
   const [warehouses, setWarehouses] = useState([]);
-  const [phoneErr, setPhoneErr] = useState('');
+  const [errors, setErrors] = useState({});
   useEffect(() => {
     getWarehouses().then((r) => setWarehouses(Array.isArray(r) ? r : r?.data || [])).catch(() => {});
   }, []);
-  const u = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  // Editing a field clears its own error so the message disappears as it's fixed.
+  const u = (k) => (e) => { setF({ ...f, [k]: e.target.value }); if (errors[k]) setErrors((p) => ({ ...p, [k]: undefined })); };
+
+  const warehouseRequired = warehouses.length > 0;
+  // Every visible field is mandatory. The button stays disabled until each is
+  // non-empty; format errors (email/phone/password length) surface on submit.
+  const canSubmit = !!(f.name.trim() && f.email.trim() && f.phone.trim() && f.role && f.password.trim()
+    && (!warehouseRequired || f.warehouseId));
+
   const submit = async () => {
-    // Phone is optional, but when provided it must be a valid 10-digit number.
-    if (f.phone && !/^\d{10}$/.test(f.phone.trim())) {
-      setPhoneErr('Enter a valid 10-digit phone number');
-      return;
-    }
-    setPhoneErr('');
+    const e = validateMember(f, { warehouseRequired });
+    setErrors(e);
+    if (Object.keys(e).length) return;
     try {
-      // Drop empty optional fields so backend validation doesn't reject "".
-      const { warehouseId, ...rest } = f;
-      const payload = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== ''));
-      if (warehouseId) payload.warehouseIds = [warehouseId];
+      // Send trimmed values; all fields are required now, so nothing is stripped.
+      const payload = {
+        name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(),
+        role: f.role, password: f.password.trim(),
+      };
+      if (f.warehouseId) payload.warehouseIds = [f.warehouseId];
       await createUser(payload);
       toast('success', 'Team member added');
       onDone();
@@ -183,9 +212,9 @@ const AddUserModal = ({ onClose, onDone }) => {
   };
   return (
     <Modal title="Add Team Member" onClose={onClose}>
-      <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /></Field>
-      <Field label="Email"><input className={inputCls} value={f.email} onChange={u('email')} /></Field>
-      <Field label="Phone">
+      <Field label="Name *"><input className={inputCls} value={f.name} onChange={u('name')} /><FieldError msg={errors.name} /></Field>
+      <Field label="Email *"><input className={inputCls} value={f.email} onChange={u('email')} /><FieldError msg={errors.email} /></Field>
+      <Field label="Phone *">
         <input
           className={inputCls}
           type="tel"
@@ -195,11 +224,11 @@ const AddUserModal = ({ onClose, onDone }) => {
           onChange={(e) => {
             const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
             setF({ ...f, phone: digits });
-            if (phoneErr) setPhoneErr('');
+            if (errors.phone) setErrors((p) => ({ ...p, phone: undefined }));
           }}
           placeholder="For driver / mobile login"
         />
-        {phoneErr && <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {phoneErr}</p>}
+        <FieldError msg={errors.phone} />
       </Field>
       {/* Dropdown stays ENABLED — Operations Manager is simply the only role a
           new member can be given, so no other role can be submitted from this
@@ -209,6 +238,7 @@ const AddUserModal = ({ onClose, onDone }) => {
           <option value="" disabled>Select role</option>
           <option value="operations_manager">Operations Manager</option>
         </select>
+        <FieldError msg={errors.role} />
       </Field>
       {f.role === 'operations_manager' && (
         <Field label="Assigned Warehouse *">
@@ -218,14 +248,14 @@ const AddUserModal = ({ onClose, onDone }) => {
             <option value="" disabled>Select warehouse</option>
             {warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
           </select>
+          <FieldError msg={errors.warehouseId} />
         </Field>
       )}
-      <Field label="Temp Password (optional)">
-        <input className={inputCls} value={f.password} onChange={u('password')} placeholder="Leave blank to invite" />
+      <Field label="Temporary Password *">
+        <input className={inputCls} value={f.password} onChange={u('password')} placeholder="They sign in with this" />
+        <FieldError msg={errors.password} />
       </Field>
-      {/* Name + Role are required; a warehouse must be picked when the company
-          actually has warehouses to choose from. */}
-      <PrimaryBtn disabled={!f.name || !f.role || (warehouses.length > 0 && !f.warehouseId)} onClick={submit}>
+      <PrimaryBtn disabled={!canSubmit} onClick={submit}>
         <span className="material-symbols-outlined text-base">person_add</span> Add Member
       </PrimaryBtn>
     </Modal>

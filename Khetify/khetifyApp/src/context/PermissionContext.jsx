@@ -5,12 +5,12 @@ import { resolveCapability as resolve } from "../lib/capabilities";
 const PermissionContext = createContext(null);
 
 export const PermissionProvider = ({ children }) => {
-  const [state, setState] = useState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], loading: true });
+  const [state, setState] = useState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], name: null, companyName: null, warehouses: [], loading: true });
 
   const refresh = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      setState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], loading: false });
+      setState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], name: null, companyName: null, warehouses: [], loading: false });
       return;
     }
     try {
@@ -25,6 +25,12 @@ export const PermissionProvider = ({ children }) => {
           // Warehouse-level access: the warehouses this user is assigned to
           // (empty = unscoped). Mirrors backend services/warehouseScope.js.
           warehouseIds: (res.data.warehouseIds || []).map(String),
+          // Identity for the header profile: the person, their company's business
+          // name, and the assigned warehouse(s) resolved to names. Live from the
+          // API, so a rename or reassignment shows without re-login.
+          name: res.data.name || null,
+          companyName: res.data.companyName || null,
+          warehouses: res.data.warehouses || [],
           loading: false,
         });
       } else {
@@ -32,7 +38,7 @@ export const PermissionProvider = ({ children }) => {
       }
     } catch (err) {
       console.error("Permission load failed:", err?.response?.data || err.message);
-      setState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], loading: false });
+      setState({ role: null, capabilities: [], deniedCapabilities: [], warehouseIds: [], name: null, companyName: null, warehouses: [], loading: false });
     }
   }, []);
 

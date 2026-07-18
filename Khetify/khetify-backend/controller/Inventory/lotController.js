@@ -37,13 +37,18 @@ exports.receiveLot = async (req, res) => {
     // warehouse books it as IN TRANSIT; that warehouse must scan the parent lot
     // and Confirm Receive before it becomes stock. Any other creator (and every
     // GRN posting, which IS a receipt) stocks it immediately, as before.
-    const pendingReceipt = req.user.role === "company_admin" && !!req.body.warehouseId;
+    const isMainCompany = req.user.role === "company_admin";
+    const pendingReceipt = isMainCompany && !!req.body.warehouseId;
     const inv = await lotService.receiveLot({
       ownerId: req.user.companyId,
       performedBy: req.user.id,
       ...req.body,
       qty: Number(req.body.qty),
       pendingReceipt,
+      // Provenance for the original-lot register: only a lot the MAIN COMPANY
+      // mints belongs there. Taken from the authenticated role, never the body,
+      // and pinned last so a client can't spoof it through the ...req.body spread.
+      lotOrigin: isMainCompany ? "company" : "warehouse",
     });
     res.json({
       success: true,

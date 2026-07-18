@@ -7,7 +7,7 @@ const Location = require("../model/Warehouse/Location");
 const Order = require("../model/Order/Order");
 const InventoryBin = require("../model/Inventory/InventoryBin");
 const { nextSeqBlock } = require("./counterService");
-const { hasCapability } = require("../config/permissions");
+const { hasCapability, isWarehouseRole } = require("../config/permissions");
 
 function httpErr(message, status = 400) {
   const err = new Error(message);
@@ -68,12 +68,22 @@ const qrFor = (serial) => JSON.stringify({ t: "unit", s: serial });
  * every batch printed for that lot. Reserves a contiguous counter block so
  * serials are unique without per-unit round-trips, then inserts them with
  * status "generated". Marks the product trackSerial.
+ *
+ * `role` (optional) is the caller's role. Child unit serials are controlled by
+ * the MAIN COMPANY, so a company-warehouse role is rejected here — the route's
+ * authorize("lot:receive") cannot express this, because warehouse roles need
+ * that same capability for GRN/receive. Omitting `role` does not bypass
+ * anything: the route middleware still gates the request.
  */
-async function generateUnits(companyId, inventoryId, qty, { performedBy } = {}) {
+async function generateUnits(companyId, inventoryId, qty, { performedBy, role } = {}) {
   // Generation is COMPANY-ONLY — sellers never mint serials (keeps `serial`
   // globally unique and collision-free). Reject a seller owner.
   const owner = normalizeOwner(companyId);
   if (owner.ownerType !== "company") throw httpErr("Sellers cannot generate unit serials", 403);
+  // ...and within the company, only the MAIN COMPANY mints them. A warehouse
+  // views, prints and reprints the labels it received; it never creates new unit
+  // records. Enforced server-side: the disabled button is UX only.
+  if (isWarehouseRole(role)) throw httpErr("Only the Main Company can generate unit labels.", 403);
   companyId = owner.ownerId;
 
   qty = Number(qty);

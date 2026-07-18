@@ -12,7 +12,10 @@ const fail = (res, err) => {
 
 exports.generate = async (req, res) => {
   try {
-    const r = await svc.generateUnits(req.user.companyId, req.body.inventoryId, req.body.qty, { performedBy: req.user.id });
+    // `role` lets the service bar a company warehouse from minting serials —
+    // only the main company controls child units. Print/reprint/list are
+    // deliberately not passed a role: a warehouse must keep doing those.
+    const r = await svc.generateUnits(req.user.companyId, req.body.inventoryId, req.body.qty, { performedBy: req.user.id, role: req.user.role });
     await audit.log({ req, action: "units.generated", entityType: "Inventory", entityId: req.body.inventoryId, after: r });
     res.status(201).json({ success: true, message: `Generated ${r.generated} unit barcode(s)`, data: r });
   } catch (err) { fail(res, err); }

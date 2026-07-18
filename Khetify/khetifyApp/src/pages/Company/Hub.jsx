@@ -70,7 +70,7 @@ const greeting = () => {
 const Hub = () => {
   const navigate = useNavigate();
   const { has, plan, loading: subLoading } = useSubscription();
-  const { can, warehouseIds, loading: permLoading } = usePermission();
+  const { can, role, warehouseIds, loading: permLoading } = usePermission();
   // Live updates feed (same role-scoped notifications as the header bell).
   const { items: updates, unread, markRead, markAll } = useNotifications();
 
@@ -216,10 +216,17 @@ const Hub = () => {
   }), [kpi, counts, canSeeSales]);
 
   // Two distinct gates:
-  //  - HIDE (RBAC): a role without the capability never sees the card.
+  //  - HIDE (RBAC): a role without the capability never sees the card. The
+  //    optional `roles` / `hideForRoles` pins narrow it further for modules a
+  //    wildcard role shouldn't get — kept in step with the sidebar's visible()
+  //    in Components/DashboardLayout.jsx so a card and its menu entry never
+  //    disagree.
   //  - LOCK (subscription): a premium module the plan hasn't unlocked is shown
   //    but gated, routing to Billing — so users can see what an upgrade unlocks.
-  const visible = (m) => !(m.capability && !permLoading && !can(m.capability));
+  const visible = (m) =>
+    !(m.capability && !permLoading && !can(m.capability)) &&
+    !(m.roles && !permLoading && !m.roles.includes(role)) &&
+    !(m.hideForRoles && !permLoading && m.hideForRoles.includes(role));
   const locked = (m) => {
     if (m.feature === 'ims') return !imsActive;                         // any paid plan unlocks IMS
     if (m.feature === FEATURES.API_ACCESS) return !has(FEATURES.API_ACCESS);

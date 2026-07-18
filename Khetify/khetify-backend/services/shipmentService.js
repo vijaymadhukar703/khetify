@@ -25,6 +25,55 @@ function httpErr(message, status = 400) {
 }
 
 /**
+ * THE shipment reference — the single definition, reused everywhere a shipment
+ * is shown (Shipments list, Transfer History, Supply Request detail, the
+ * incoming-by-lot lookup, shipmentDetails).
+ *
+ * There is no stored reference column: `SH-<last 6 of _id>` is DERIVED from the
+ * immutable Mongo _id, so it is stable for the life of the shipment without
+ * costing a counter or a write. A carrier LR number, when one has been entered,
+ * IS the real-world reference and wins — that is why the fallback exists.
+ *
+ * Kept in one place ON PURPOSE: the whole point of the Shipments list's ref
+ * column is that an operator can match a row against the same SH-… they read in
+ * Transfer History. Two copies of this expression that drift apart would break
+ * exactly that. Do not re-inline it.
+ */
+function shipmentRef(shipment) {
+  if (!shipment?._id) return null;
+  return shipment.lrNumber || `SH-${String(shipment._id).slice(-6).toUpperCase()}`;
+}
+
+/** Name off a populated warehouse ref; null when it is still a bare ObjectId. */
+const warehouseName = (ref) => (ref && typeof ref === "object" && ref.name) || null;
+
+/**
+ * The From / To a shipment ACTUALLY moved between, resolved from the warehouse
+ * RELATIONS rather than the denormalised *Label strings.
+ *
+ * `toLabel` is not a warehouse name — it is a decorated string built at creation,
+ * e.g. `${toWh?.name || "Warehouse"} (stock request)` (transferRequestController)
+ * or `${toWh?.name || "Warehouse"} (transfer)` (sellerTransferService). When that
+ * lookup came back empty the stored label degraded to the literal
+ * "Warehouse (transfer)" — a business-flow label sitting where a warehouse name
+ * belongs. The relation is the truth, so read it first; this is the same
+ * resolution Transfer History already uses, which is why that view reads correctly.
+ *
+ * A warehouse-bound shipment falls back to "—" rather than the label: the label
+ * is known to carry flow text, and an em dash is honest where a wrong name is not.
+ * Customer/seller/vendor destinations have no warehouse to resolve, so for those
+ * `toLabel` IS the destination (the customer or seller name) and still applies.
+ */
+function shipmentRoute(shipment) {
+  const from = warehouseName(shipment.fromWarehouseId) || shipment.fromLabel || "—";
+  const toWarehouse = warehouseName(shipment.toWarehouseId);
+  const to = shipment.toType === "warehouse"
+    ? toWarehouse || "—"
+    : toWarehouse || shipment.toLabel || "—";
+  return { fromName: from, toName: to };
+}
+
+/**
  * Owner-awareness. Every service entry takes an `owner` first argument that is
  * EITHER a bare companyId (legacy/company callers — normalised to a company
  * owner) OR an explicit { ownerType, ownerId } (sellers). This lets seller
@@ -709,7 +758,7 @@ async function findIncomingByLot(ownerArg, { lotNumber, allowedWarehouseIds = nu
 
   return {
     shipmentId: ready._id,
-    ref: ready.lrNumber || `SH-${String(ready._id).slice(-6).toUpperCase()}`,
+    ref: shipmentRef(ready),
     status: ready.status,
     // The manifest token is NOT secret (the sender can re-display it at will) and
     // this caller is the authenticated, warehouse-scoped DESTINATION — so hand it
@@ -814,7 +863,7 @@ async function shipmentDetails(ownerArg, shipmentId, { allowedWarehouseIds = nul
 
   return {
     summary: {
-      ref: shipment.lrNumber || `SH-${String(shipment._id).slice(-6).toUpperCase()}`,
+      ref: shipmentRef(shipment),
       refType: shipment.refType,
       toType: shipment.toType,
       source: shipment.fromWarehouseId?.name || shipment.fromLabel || "—",
@@ -845,7 +894,24 @@ async function listShipments(ownerArg, { status, warehouseIds } = {}) {
   if (Array.isArray(warehouseIds) && warehouseIds.length) {
     filter.$or = [{ fromWarehouseId: { $in: warehouseIds } }, { toWarehouseId: { $in: warehouseIds } }];
   }
-  return Shipment.find(filter).populate("vehicleId", "regNo").populate("driverId", "name phone").sort({ createdAt: -1 }).limit(500);
+  const rows = await Shipment.find(filter)
+    .populate("vehicleId", "regNo")
+    .populate("driverId", "name phone")
+    // The warehouse relations were NOT populated here, which is why this list had
+    // only the denormalised *Label strings to show and printed a flow label like
+    // "Warehouse (transfer)" in the To column. Transfer History populates the same
+    // two refs — that is the whole difference between the two views.
+    .populate("fromWarehouseId", "name code")
+    .populate("toWarehouseId", "name code")
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+  // ADDITIVE: surface the same `ref` every other shipment view already shows, so
+  // a row can be matched against the SH-… seen in Transfer History or on a
+  // Supply Request, plus the From/To resolved from the warehouse relations.
+  // Every existing field is passed through untouched — this only adds keys. No
+  // shipment is created, modified or filtered out here.
+  return rows.map((s) => ({ ...s, ref: shipmentRef(s), ...shipmentRoute(s) }));
 }
 async function getShipment(ownerArg, id) {
   const owner = normalizeOwner(ownerArg);
@@ -873,4 +939,4 @@ async function listDiscrepancies(companyId, { status = "open" } = {}) {
   return Discrepancy.find({ companyId, ...(status ? { status } : {}) }).populate("productId", "productName").populate("shipmentId", "toLabel status").sort({ createdAt: -1 });
 }
 
-module.exports = { createShipment, approveShipment, pickShipment, packShipment, dispatchShipment, markArrived, verifyReceipt, findIncomingByLot, shipmentDetails, completeDelivery, reportException, listShipments, getShipment, ensureManifest, listForDriver, listDiscrepancies, _internal: { qrFor } };
+module.exports = { shipmentRef, createShipment, approveShipment, pickShipment, packShipment, dispatchShipment, markArrived, verifyReceipt, findIncomingByLot, shipmentDetails, completeDelivery, reportException, listShipments, getShipment, ensureManifest, listForDriver, listDiscrepancies, _internal: { qrFor } };

@@ -42,7 +42,13 @@ const WarehouseTransferHistory = () => {
     // movements this warehouse took part in (source OR destination) and makes it
     // deny-by-default when the account has no warehouse assigned. Customer/seller
     // orders are skipped server-side for a scoped caller.
-    getOrderHistory({ scope: 'warehouse' })
+    //
+    // `excludeRequests` drops the TR-* TransferRequest rows: a request is the
+    // authorisation for a move, and the move itself is the SH-* shipment raised
+    // when the request is fulfilled. Listing both showed one physical transfer
+    // twice and double-counted its value in the cards. Requests remain visible
+    // in Operations → Shipment Tracking & Transfers → Requests.
+    getOrderHistory({ scope: 'warehouse', excludeRequests: 1 })
       .then((r) => setRows(r?.data || []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
@@ -159,25 +165,42 @@ const WarehouseTransferHistory = () => {
 
       {/* List */}
       <div className="bg-white border border-stone-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1040px] resp-table">
+        <table className="w-full text-left border-collapse min-w-[1160px] resp-table">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/50">
-              {['Reference', 'Type', 'From', 'To', 'Item', 'Lot No.', 'Quantity', 'Status', 'MRP', 'Date'].map((h) => (
+              {['Reference', 'Type', 'Direction', 'From', 'To', 'Item', 'Lot No.', 'Quantity', 'Status', 'MRP', 'Date'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-[10px] font-bold text-stone-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
             {loading ? (
-              <tr><td colSpan={10} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
+              <tr><td colSpan={11} className="px-5 py-10 text-center text-stone-400">Loading…</td></tr>
             ) : paged.length === 0 ? (
-              <tr><td colSpan={10} className="px-5 py-10 text-center text-stone-400">No transfers involve your warehouse yet.</td></tr>
-            ) : paged.map((r) => (
+              <tr><td colSpan={11} className="px-5 py-10 text-center text-stone-400">No transfers involve your warehouse yet.</td></tr>
+            ) : paged.map((r) => {
+              const dir = directionOf(r);
+              return (
               <tr key={`${r.kind}-${r.id}`} className="hover:bg-stone-50/60">
                 <td data-label="Reference" className="px-5 py-3.5 font-bold text-stone-800 text-sm">{r.ref}</td>
                 {/* Shared rule: warehouse→warehouse reads "Transfer", anything
                     to an outside party (e.g. a seller supply) reads "Sales". */}
                 <td data-label="Type" className="px-5 py-3.5 text-sm text-stone-600">{movementKind(r) || 'Transfer'}</td>
+                {/* Direction is relative to THIS warehouse: the same transfer is
+                    Outgoing for its source and Incoming for its destination, so it
+                    can only be resolved per-viewer. directionOf() compares the
+                    row's warehouse IDs against the session's assigned warehouse(s)
+                    — never names, which are neither unique nor stable. Same helper
+                    the cards and the Direction filter already use, so the column
+                    can never disagree with them. Colours match the Incoming/Outgoing
+                    pills in Operations → Shipments. */}
+                <td data-label="Direction" className="px-5 py-3.5">
+                  <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${
+                    dir === 'Outgoing' ? 'bg-orange-50 text-orange-600'
+                    : dir === 'Incoming' ? 'bg-blue-50 text-blue-700'
+                    : 'bg-stone-100 text-stone-500'
+                  }`}>{dir}</span>
+                </td>
                 <td data-label="From" className="px-5 py-3.5 text-sm text-stone-600">{r.from || '—'}</td>
                 <td data-label="To" className="px-5 py-3.5 text-sm text-stone-600">{r.to || r.party || '—'}</td>
                 <td data-label="Item" className="px-5 py-3.5 text-sm text-stone-600 max-w-[200px] truncate" title={r.itemName}>{r.itemName || '—'}</td>
@@ -192,7 +215,8 @@ const WarehouseTransferHistory = () => {
                 <td data-label="MRP" className="px-5 py-3.5 text-sm font-semibold text-stone-800">{r.total ? formatINR(r.total) : '—'}</td>
                 <td data-label="Date" className="px-5 py-3.5 text-sm text-stone-500 whitespace-nowrap">{fmtDate(r.date)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -41,6 +41,22 @@ const ROLES = [
   "seller_staff",
 ];
 
+// The COMPANY WAREHOUSE roles — the people who physically hold and move stock,
+// as opposed to the main company (company_admin). Mirrors the frontend's
+// src/lib/roles.js WAREHOUSE_ROLES. This is a role identity, NOT a capability:
+// use it only where a rule is about "who you are" rather than "what you may do"
+// (e.g. only the main company mints child unit serials, while warehouse roles
+// keep the lot:receive they need for GRN/receive).
+const WAREHOUSE_ROLES = new Set([
+  "operations_manager", // active consolidated warehouse/operations role
+  "warehouse_manager",  // legacy warehouse manager
+  "warehouse_operator", // legacy warehouse operator
+  "inventory_manager",  // legacy inventory manager
+]);
+
+/** Is `role` a company-warehouse role? */
+const isWarehouseRole = (role) => WAREHOUSE_ROLES.has(role);
+
 /**
  * Role → capabilities. A capability is granted if the role list contains the
  * exact string, "<entity>:*", or "*". See hasCapability() for resolution.
@@ -250,9 +266,17 @@ const READONLY_SUFFIXES = [":read", ":view", ":export", ":read_own"];
  * initiating warehouse-to-warehouse transfers — admins oversee transfers but
  * do not perform them (operations managers do, via inventory:*). The deny is
  * checked FIRST in hasCapability(), so it beats "*".
+ *
+ * shipment:create follows the same rule: goods are shipped by the warehouse that
+ * physically holds them, so the company admin's Shipment Tracking view is
+ * read-only oversight. This blocks POST /api/shipments for company_admin (the
+ * hidden "New Shipment" button alone would not stop a direct API call).
+ * Operations/warehouse managers keep shipment:* and are unaffected. The supply
+ * dispatch manifest is created service-side (shipmentService.ensureManifest),
+ * not through that route, so it keeps working.
  */
 const ROLE_DENIED = {
-  company_admin: ["inventory:transfer"],
+  company_admin: ["inventory:transfer", "shipment:create"],
 };
 
 /** Capabilities denied to `role` (empty array if none). */
@@ -293,4 +317,4 @@ function capabilitiesForRole(role) {
   return ROLE_CAPABILITIES[role] || [];
 }
 
-module.exports = { ROLES, ASSIGNABLE_ROLES, SELLER_ASSIGNABLE_ROLES, ROLE_CAPABILITIES, ROLE_DENIED, hasCapability, capabilitiesForRole, deniedForRole };
+module.exports = { ROLES, ASSIGNABLE_ROLES, SELLER_ASSIGNABLE_ROLES, WAREHOUSE_ROLES, ROLE_CAPABILITIES, ROLE_DENIED, hasCapability, capabilitiesForRole, deniedForRole, isWarehouseRole };

@@ -56,11 +56,15 @@ const InventoryTracking = () => {
         {/* Main Company mints lots (Create) but doesn't perform receipts; the
             Company Warehouse never mints a lot — its "Receive Lot" scans an
             incoming parent lot and confirms the transfer into this warehouse. */}
+        {/* Main Company reads its Inventory as the ORIGINAL LOT REGISTER: the
+            lots it minted, at their created quantity. The Company Warehouse keeps
+            the live-stock view — same component, flag off. */}
         <ImsLots
           showSummary showStockStatus paginate showBatchNo fluid requireWarehouse
           hideReceive={isMainCompany}
           hideCreate={isWarehouse}
           receiveTransfer={isWarehouse}
+          originalRegister={isMainCompany}
         />
       </div>
     );
