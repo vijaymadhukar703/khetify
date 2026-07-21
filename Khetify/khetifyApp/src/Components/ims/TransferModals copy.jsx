@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
-import { verifyShipment, getLots, getProducts } from '../../lib/imsApi';
+import { verifyShipment, getLots } from '../../lib/imsApi';
 import { usePermission } from '../../context/PermissionContext';
 import { Modal, PrimaryBtn, GhostBtn, Th } from '../../pages/Company/ims/ImsUi';
 import ScanBox from './ScanBox';
@@ -82,7 +82,6 @@ export function ReceiveModal({ shipment, onClose, onDone }) {
   const [qr, setQr] = useState('');
   const [busy, setBusy] = useState(false);
   const [products, setProducts] = useState({}); // inventoryId -> product name
-  const [productById, setProductById] = useState({}); // productId -> product name
   // CAMERA-FIRST: clicking "Receive Lot" opens the device camera right away
   // (where supported) — the barcode is traced, then validated against the
   // shipment and the manager's warehouse before anything else happens.
@@ -95,15 +94,6 @@ export function ReceiveModal({ shipment, onClose, onDone }) {
       const map = {};
       listOf(r).forEach((lot) => { map[lot._id] = lot.productId?.productName; });
       setProducts(map);
-    }).catch(() => {});
-    // The destination warehouse does NOT own the source lot, so getLots (which
-    // is warehouse-scoped) won't contain the sender's inventoryId. Resolve the
-    // product name from the company catalog by the line's productId instead.
-    getProducts().then((r) => {
-      const list = r?.data || r?.products || (Array.isArray(r) ? r : []);
-      const pmap = {};
-      list.forEach((prod) => { pmap[String(prod._id)] = prod.productName; });
-      setProductById(pmap);
     }).catch(() => {});
   }, []);
 
@@ -172,7 +162,7 @@ export function ReceiveModal({ shipment, onClose, onDone }) {
               {(shipment.lines || []).map((l, i) => (
                 <tr key={i}>
                   <td className="px-4 py-2 font-mono text-xs font-bold">{l.lotNumber || l.batchNumber || '—'}</td>
-                  <td className="px-4 py-2 text-xs text-stone-600">{productById[String(l.productId?._id || l.productId)] || products[l.inventoryId] || l.productName || '—'}</td>
+                  <td className="px-4 py-2 text-xs text-stone-600">{products[l.inventoryId] || '—'}</td>
                   <td className="px-4 py-2 text-xs text-right">{l.qty}</td>
                 </tr>
               ))}
