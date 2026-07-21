@@ -12,7 +12,6 @@ const shipmentService = require("../../services/shipmentService");
 const locationService = require("../../services/locationService");
 const { assertCompanyWarehouse } = require("../../services/warehouseOwnershipService");
 const { notify, notifyWarehouseTeam } = require("../../services/notificationService");
-const { warehouseScope } = require("../../services/warehouseScope");
 
 // Stage → the supply-order statuses that belong in each Send Stock tab.
 const STAGE_STATUSES = {
@@ -63,13 +62,6 @@ exports.getSupplyOrders = async (req, res) => {
     const filter = { companyId: req.user.companyId };
     const stageStatuses = STAGE_STATUSES[req.query.stage];
     if (stageStatuses) filter.status = { $in: stageStatuses };
-
-    // Warehouse-level access: a scoped warehouse user only sees the supply the
-    // company ASSIGNED to their warehouse (sourceWarehouseId in their warehouses).
-    // Unscoped roles (company_admin holds "*") are untouched and still see every
-    // request in pending/approved/assigned/history, so the company manages all.
-    const scope = await warehouseScope(req.user);
-    if (scope) filter.sourceWarehouseId = { $in: scope };
 
     const rows = await SupplyOrder.find(filter)
       .sort({ createdAt: -1 })
@@ -144,12 +136,7 @@ exports.getSourceOptions = async (req, res) => {
  * (drives the company Home "Supply requests" banner). */
 exports.getPendingCount = async (req, res) => {
   try {
-    // Pending approvals belong to the COMPANY — unassigned requests have no
-    // source warehouse yet, so a scoped warehouse user has none to see.
-    const scope = await warehouseScope(req.user);
-    const pendingFilter = { companyId: req.user.companyId, status: "requested" };
-    if (scope) pendingFilter.sourceWarehouseId = { $in: scope };
-    const pendingCount = await SupplyOrder.countDocuments(pendingFilter);
+    const pendingCount = await SupplyOrder.countDocuments({ companyId: req.user.companyId, status: "requested" });
     res.json({ success: true, data: { pendingCount } });
   } catch (err) {
     res.status(500).json({ success: false, message: "Server error" });
@@ -298,13 +285,6 @@ exports.getSupplyOrderDetails = async (req, res) => {
       .populate({ path: "sourceWarehouseId", select: "name code" })
       .lean();
     if (!order) return res.status(404).json({ success: false, message: "Supply order not found" });
-
-    // Warehouse-level access: only the ASSIGNED warehouse may open this request.
-    // 404 (not 403) so the id cannot be used to probe which requests exist.
-    const scope = await warehouseScope(req.user);
-    if (scope && !scope.includes(String(order.sourceWarehouseId?._id || order.sourceWarehouseId || ""))) {
-      return res.status(404).json({ success: false, message: "Supply order not found" });
-    }
 
     const shipment = order.shipmentId
       ? await Shipment.findOne({ _id: order.shipmentId, companyId }).lean()

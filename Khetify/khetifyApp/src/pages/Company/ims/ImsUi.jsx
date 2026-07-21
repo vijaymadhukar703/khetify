@@ -61,8 +61,8 @@ export const GhostBtn = ({ children, ...props }) => (
   </button>
 );
 
-export const Th = ({ children, right }) => (
-  <th className={`px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest ${right ? 'text-right' : 'text-left'}`}>
+export const Th = ({ children, right, pad = 'px-6' }) => (
+  <th className={`${pad} py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest ${right ? 'text-right' : 'text-left'}`}>
     {children}
   </th>
 );

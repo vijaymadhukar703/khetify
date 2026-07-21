@@ -51,8 +51,8 @@ const ImsTransport = () => {
   const active = tabs.some(([k]) => k === tab) ? tab : tabs[0][0];
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:px-6 sm:py-6 bg-white font-sora">
-      <div className="w-full space-y-6">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white font-sora">
+      <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center gap-1 border-b border-stone-200">
           {tabs.map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px ${active === k ? 'border-[#EA2831] text-[#EA2831]' : 'border-transparent text-stone-400 hover:text-stone-700'}`}>{l}</button>
@@ -192,39 +192,22 @@ const ShipmentsTab = () => {
           )}
         </div>
       </div>
-      {/* Fixed layout so all columns fit the full page width with no horizontal
-          scroll on desktop — the colgroup proportions each column and long text
-          wraps (From/To/Driver) instead of forcing a min-width. Below lg the
-          resp-table CSS collapses rows into cards, ignoring these widths. */}
-      <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
-        <table className="w-full text-left border-collapse table-fixed resp-table">
-          <colgroup>
-            <col style={{ width: '10%' }} />{/* Shipment Ref. */}
-            <col style={{ width: '13%' }} />{/* From */}
-            <col style={{ width: '14%' }} />{/* To */}
-            <col style={{ width: '8%' }} />{/* Type */}
-            <col style={{ width: '10%' }} />{/* Vehicle */}
-            <col style={{ width: '13%' }} />{/* Driver */}
-            <col style={{ width: '9%' }} />{/* Status */}
-            <col style={{ width: '9%' }} />{/* Dispatched */}
-            <col style={{ width: '14%' }} />{/* Actions */}
-          </colgroup>
-          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th pad="px-3">Shipment Ref.</Th><Th pad="px-3">From</Th><Th pad="px-3">To</Th><Th pad="px-3">Type</Th><Th pad="px-3">Vehicle</Th><Th pad="px-3">Driver</Th><Th pad="px-3">Status</Th><Th pad="px-3">Dispatched</Th><Th pad="px-3" right>Actions</Th></tr></thead>
+      {/* The extra Ref column needs room: widen the sheet and let it scroll
+          horizontally on small screens rather than clipping (the wrapper was
+          overflow-hidden, which cut the table off instead of scrolling it). */}
+      <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[1120px] resp-table">
+          <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>Shipment Ref.</Th><Th>From</Th><Th>To</Th><Th>Type</Th><Th>Vehicle</Th><Th>Status</Th><Th>Dispatched</Th><Th right>Actions</Th></tr></thead>
           <tbody className="divide-y divide-stone-100">
             {visible.map((s) => {
               const dir = directionOf(s);
-              // Driver name/phone are stored on the shipment at creation
-              // (driverName / driverPhone); fall back to a linked Driver record
-              // if the backend returns one instead.
-              const driverName = s.driverName || s.driver?.name || s.driverId?.userId?.name || s.driverId?.name || s.manifest?.driverName || '';
-              const driverPhone = s.driverPhone || s.driver?.phone || s.driverId?.phone || s.driverId?.userId?.phone || s.manifest?.driverPhone || '';
               return (
               <tr key={s._id} className="hover:bg-stone-50/40">
                 {/* The reference the backend derives (shipmentService.shipmentRef)
                     — the SAME value Transfer History and Supply Requests show, so
                     an operator can match a row across all three. Never rebuilt
                     here. Shown in full, no truncation. */}
-                <td className="px-3 py-4 align-top" data-label="Shipment Ref.">
+                <td className="px-4 py-4" data-label="Shipment Ref.">
                   <span className="text-xs font-bold font-mono bg-stone-100 text-stone-700 px-2.5 py-1 rounded-full whitespace-nowrap">
                     {s.ref || '—'}
                   </span>
@@ -238,33 +221,22 @@ const ShipmentsTab = () => {
                     warehouse RELATIONS (shipmentService.shipmentRoute) — never from
                     the *Label strings, which carry business-flow text like
                     "Warehouse (transfer)". Same resolution Transfer History uses,
-                    so the two views always agree. Long names wrap to 2 lines
-                    (line-clamp) with the full value in a tooltip. */}
-                <td className="px-3 py-4 text-sm text-stone-600 align-top" data-label="From">
-                  <span className="block break-words line-clamp-2" title={s.fromName || s.fromLabel || ''}>{s.fromName || s.fromLabel || '—'}</span>
-                </td>
-                <td className="px-3 py-4 text-sm font-bold text-stone-900 align-top" data-label="To">
-                  <span className="block break-words line-clamp-2" title={s.toName || s.toLabel || ''}>{s.toName || s.toLabel || '—'}</span>
+                    so the two views always agree. */}
+                <td className="px-6 py-4 text-sm text-stone-600" data-label="From">{s.fromName || '—'}</td>
+                <td className="px-6 py-4 text-sm font-bold text-stone-900" data-label="To">
+                  {s.toName || '—'}
                   {dir && (
-                    <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full align-middle ${
                       dir === 'Outgoing' ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-700'
                     }`}>{dir}</span>
                   )}
                 </td>
-                <td className="px-3 py-4 text-xs text-stone-500 align-top" data-label="Type"><span className="block break-words">{movementKind(s)}</span></td>
-                <td className="px-3 py-4 text-xs text-stone-500 align-top" data-label="Vehicle"><span className="block truncate" title={s.vehicleId?.regNo || s.vehicleNo || ''}>{s.vehicleId?.regNo || s.vehicleNo || '—'}</span></td>
-                <td className="px-3 py-4 text-xs text-stone-500 align-top" data-label="Driver">
-                  {driverName || driverPhone ? (
-                    <div className="leading-tight">
-                      {driverName && <div className="font-semibold text-stone-700 break-words">{driverName}</div>}
-                      {driverPhone && <div className="text-stone-400 break-words">{driverPhone}</div>}
-                    </div>
-                  ) : '—'}
-                </td>
-                <td className="px-3 py-4 align-top" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[s.status] || 'bg-stone-100'}`}>{s.status}</span></td>
-                <td className="px-3 py-4 text-xs text-stone-500 align-top" data-label="Dispatched">{s.dispatchedAt ? fmtDate(s.dispatchedAt) : '—'}</td>
-                <td className="px-3 py-4 cell-actions align-top">
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                <td className="px-6 py-4 text-xs text-stone-500" data-label="Type">{movementKind(s)}</td>
+                <td className="px-6 py-4 text-xs text-stone-500" data-label="Vehicle">{s.vehicleId?.regNo || s.vehicleNo || '—'}</td>
+                <td className="px-6 py-4" data-label="Status"><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[s.status] || 'bg-stone-100'}`}>{s.status}</span></td>
+                <td className="px-6 py-4 text-xs text-stone-500" data-label="Dispatched">{s.dispatchedAt ? fmtDate(s.dispatchedAt) : '—'}</td>
+                <td className="px-6 py-4 cell-actions">
+                  <div className="flex items-center justify-end gap-2">
                     {/* Transfers skip the separate Approve step — Dispatch
                         accepts a planned shipment directly. Approve stays for
                         other shipment types. */}
@@ -289,7 +261,7 @@ const ShipmentsTab = () => {
               </tr>
               );
             })}
-            {visible.length === 0 && <tr><td colSpan={9} className="px-6 py-12 text-center text-sm text-stone-400">{needle ? `No shipment matches “${q.trim()}”.` : view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-stone-400">{needle ? `No shipment matches “${q.trim()}”.` : view === 'incoming' ? 'No incoming transfers for your warehouse.' : 'No shipments yet.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -303,10 +275,6 @@ const ShipmentsTab = () => {
 };
 
 const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
-  // The caller's own warehouse(s) — used to pre-fill the FROM picker so a
-  // warehouse user never has to hunt for their own warehouse in the list.
-  const perm = usePermission();
-  const { warehouseIds } = perm;
   const [warehouses, setWarehouses] = useState([]);
   // Destination picker uses the full company directory; the FROM picker stays
   // on the caller's scoped list (you dispatch from YOUR warehouse).
@@ -316,133 +284,53 @@ const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
   // can be created — the warehouse-transfer option is hidden and never default.
   const [f, setF] = useState({ toType: canTransfer ? 'warehouse' : 'customer', fromWarehouseId: '', toWarehouseId: '', toLabel: '', vehicleNo: '', driverName: '', driverPhone: '' });
   const [lines, setLines] = useState([{ inventoryId: '', qty: '' }]);
-  // One error bag for the whole form — every field is required, so submit
-  // validates them all and each message renders under its own field.
-  const [errors, setErrors] = useState({});
-  const setField = (key, value) => {
-    setF((p) => ({ ...p, [key]: value }));
-    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
-  };
+  const [phoneErr, setPhoneErr] = useState('');
   useEffect(() => {
-    getWarehouses().then((r) => {
-      const list = listOf(r);
-      setWarehouses(list);
-      // Auto-select the caller's OWN warehouse as the source. A warehouse user
-      // always ships FROM their own warehouse; falls back to the sole warehouse
-      // when only one exists. Unscoped multi-warehouse users still choose.
-      setF((prev) => {
-        if (prev.fromWarehouseId) return prev;
-        // Collect every id the context might use for "my / current warehouse":
-        // string ids, populated { _id } objects, and singular fields that some
-        // roles expose (warehouseId / currentWarehouseId). Then match against
-        // the scoped list so the FROM select shows the warehouse NAME, not "—".
-        const myIds = [
-          ...((warehouseIds || []).map((w) => String(w?._id || w))),
-          perm.warehouseId && String(perm.warehouseId?._id || perm.warehouseId),
-          perm.currentWarehouseId && String(perm.currentWarehouseId?._id || perm.currentWarehouseId),
-        ].filter(Boolean);
-        const mineId = myIds.find((id) => list.some((w) => String(w._id) === id));
-        const auto = mineId || (list.length === 1 ? String(list[0]._id) : '');
-        return auto ? { ...prev, fromWarehouseId: auto } : prev;
-      });
-    }).catch(() => {});
+    getWarehouses().then((r) => setWarehouses(listOf(r))).catch(() => {});
     getWarehouseDirectory().then((r) => setWarehouseDir(Array.isArray(r) ? r : r?.data || [])).catch(() => {});
     getLots().then((r) => setLots(listOf(r))).catch(() => {});
   }, []);
   const submit = async () => {
-    // Every field is mandatory. Collect all problems first so the user sees
-    // each missing field at once, not one at a time.
-    const e = {};
-    if (!f.fromWarehouseId) e.fromWarehouseId = 'Source warehouse is required';
-    if (f.toType === 'warehouse') {
-      if (!f.toWarehouseId) e.toWarehouseId = 'Select a destination warehouse';
-      const filled = lines.filter((l) => l.inventoryId && Number(l.qty) > 0);
-      if (!filled.length) e.lines = 'Add at least one lot with a quantity';
-      else if (lines.some((l) => (l.inventoryId && !(Number(l.qty) > 0)) || (!l.inventoryId && l.qty))) e.lines = 'Every lot row needs both a lot and a quantity';
-    } else if (!f.toLabel.trim()) {
-      e.toLabel = 'Destination label is required';
+    // Driver phone must be a valid 10-digit mobile number.
+    if (!/^\d{10}$/.test(f.driverPhone.trim())) {
+      setPhoneErr('Enter a valid 10-digit driver phone number');
+      return;
     }
-    if (!f.vehicleNo.trim()) e.vehicleNo = 'Vehicle number is required';
-    if (!f.driverName.trim()) e.driverName = 'Driver name is required';
-    if (!/^\d{10}$/.test(f.driverPhone.trim())) e.driverPhone = 'Enter a valid 10-digit driver phone number';
-    setErrors(e);
-    if (Object.keys(e).length) { toast('error', 'Please fill all required fields'); return; }
+    setPhoneErr('');
     try {
-      const body = { toType: f.toType, toLabel: f.toLabel.trim() || (f.toType === 'warehouse' ? 'Warehouse transfer' : 'Customer'), fromWarehouseId: f.fromWarehouseId, vehicleNo: f.vehicleNo.trim(), driverName: f.driverName.trim(), driverPhone: f.driverPhone.trim() };
+      const body = { toType: f.toType, toLabel: f.toLabel || (f.toType === 'warehouse' ? 'Warehouse transfer' : 'Customer'), fromWarehouseId: f.fromWarehouseId || undefined, vehicleNo: f.vehicleNo, driverName: f.driverName, driverPhone: f.driverPhone.trim() };
       if (f.toType === 'warehouse') {
         body.toWarehouseId = f.toWarehouseId;
-        body.lines = lines.filter((l) => l.inventoryId && Number(l.qty) > 0).map((l) => ({ inventoryId: l.inventoryId, qty: Number(l.qty) }));
+        body.lines = lines.filter((l) => l.inventoryId && l.qty).map((l) => ({ inventoryId: l.inventoryId, qty: Number(l.qty) }));
       }
       await createTmsShipment(body); toast('success', 'Shipment planned'); onDone();
     } catch (err) { apiError(err); }
   };
-  const errText = (msg) => (msg ? <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {msg}</p> : null);
-  const clearLinesErr = () => { if (errors.lines) setErrors((er) => ({ ...er, lines: undefined })); };
-  const fromName = warehouses.find((w) => String(w._id) === String(f.fromWarehouseId))?.name;
   return (
     <Modal title="New Shipment" onClose={onClose} wide>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-        <Field label="Type" required>
-          <select className={inputCls} value={f.toType} onChange={(e) => setField('toType', e.target.value)}>
-            {canTransfer && <option value="warehouse">Warehouse transfer</option>}
-            <option value="customer">Customer / manual</option>
-          </select>
-        </Field>
-        <Field label="From warehouse" required>
-          {/* Read-only: a warehouse user always ships FROM their own warehouse,
-              auto-detected on load. Rendered as text so it can't be changed. */}
-          <div className={`${inputCls} flex items-center ${fromName ? 'text-stone-900' : 'text-stone-400'}`}>
-            {fromName || 'No warehouse assigned'}
-          </div>
-          {errText(errors.fromWarehouseId)}
-        </Field>
+        <Field label="Type"><select className={inputCls} value={f.toType} onChange={(e) => setF({ ...f, toType: e.target.value })}>{canTransfer && <option value="warehouse">Warehouse transfer</option>}<option value="customer">Customer / manual</option></select></Field>
+        <Field label="From warehouse"><select className={inputCls} value={f.fromWarehouseId} onChange={(e) => setF({ ...f, fromWarehouseId: e.target.value })}><option value="">—</option>{warehouses.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}</select></Field>
       </div>
       {f.toType === 'warehouse' ? (
         <>
-          <Field label="To warehouse" required>
-            <select className={inputCls} value={f.toWarehouseId} onChange={(e) => setField('toWarehouseId', e.target.value)}>
-              <option value="">Select…</option>
-              {(warehouseDir.length ? warehouseDir : warehouses).filter((w) => String(w._id) !== String(f.fromWarehouseId)).map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
-            </select>
-            {errText(errors.toWarehouseId)}
-          </Field>
-          <p className="text-xs font-bold text-stone-500 mt-2">Lots to transfer <span className="text-[#EA2831]">*</span></p>
+          <Field label="To warehouse *"><select className={inputCls} value={f.toWarehouseId} onChange={(e) => setF({ ...f, toWarehouseId: e.target.value })}><option value="">Select…</option>{(warehouseDir.length ? warehouseDir : warehouses).filter((w) => String(w._id) !== String(f.fromWarehouseId)).map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}</select></Field>
+          <p className="text-xs font-bold text-stone-500 mt-2">Lots to transfer</p>
           {lines.map((l, i) => (
-            <div key={i} className="flex items-end gap-2 mb-2">
-              {/* Lot picker takes all the remaining width (min-w-0 lets it shrink
-                  inside the flex row) and w-full so the SELECTED lot is actually
-                  visible — the old layout collapsed the select to just its arrow. */}
-              <div className="flex-1 min-w-0">
-                <select className={`${inputCls} w-full`} value={l.inventoryId} onChange={(e) => { setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, inventoryId: e.target.value } : x)); clearLinesErr(); }}>
-                  <option value="">Select lot…</option>
-                  {lots.map((lot) => <option key={lot._id} value={lot._id}>{(lot.productId?.productName || 'Item')} · {lot.lotNumber || lot.batchNumber} (avail {lot.availableStock})</option>)}
-                </select>
-              </div>
-              {/* inputCls carries w-full, so the width is pinned via inline style
-                  (beats the class) — keeps Qty compact and lets the lot select
-                  fill the row. */}
-              <input type="number" min="1" placeholder="Qty" style={{ width: '5rem' }} className={`${inputCls} shrink-0 text-center px-2`} value={l.qty} onChange={(e) => { setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, qty: e.target.value } : x)); clearLinesErr(); }} />
+            <div key={i} className="flex items-end gap-2">
+              <div className="flex-1"><select className={inputCls} value={l.inventoryId} onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, inventoryId: e.target.value } : x))}><option value="">Select lot…</option>{lots.map((lot) => <option key={lot._id} value={lot._id}>{(lot.productId?.productName || 'Item')} · {lot.lotNumber || lot.batchNumber} (avail {lot.availableStock})</option>)}</select></div>
+              <input type="number" min="1" placeholder="Qty" className={`${inputCls} w-24`} value={l.qty} onChange={(e) => setLines((ls) => ls.map((x, idx) => idx === i ? { ...x, qty: e.target.value } : x))} />
               {lines.length > 1 && <GhostBtn onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}>✕</GhostBtn>}
             </div>
           ))}
-          {errText(errors.lines)}
           <GhostBtn onClick={() => setLines((ls) => [...ls, { inventoryId: '', qty: '' }])}>+ Add lot</GhostBtn>
         </>
       ) : (
-        <Field label="Destination label" required>
-          <input className={inputCls} value={f.toLabel} onChange={(e) => setField('toLabel', e.target.value)} placeholder="Customer / address" />
-          {errText(errors.toLabel)}
-        </Field>
+        <Field label="Destination label *"><input className={inputCls} value={f.toLabel} onChange={(e) => setF({ ...f, toLabel: e.target.value })} placeholder="Customer / address" /></Field>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 mt-2">
-        <Field label="Vehicle No." required>
-          <input className={inputCls} value={f.vehicleNo} onChange={(e) => setField('vehicleNo', e.target.value)} />
-          {errText(errors.vehicleNo)}
-        </Field>
-        <Field label="Driver" required>
-          <input className={inputCls} value={f.driverName} onChange={(e) => setField('driverName', e.target.value)} />
-          {errText(errors.driverName)}
-        </Field>
+        <Field label="Vehicle No."><input className={inputCls} value={f.vehicleNo} onChange={(e) => setF({ ...f, vehicleNo: e.target.value })} /></Field>
+        <Field label="Driver"><input className={inputCls} value={f.driverName} onChange={(e) => setF({ ...f, driverName: e.target.value })} /></Field>
         <Field label="Driver phone" required>
           <input
             className={inputCls}
@@ -451,9 +339,13 @@ const NewShipmentModal = ({ canTransfer = true, onClose, onDone }) => {
             maxLength={10}
             placeholder="10-digit number"
             value={f.driverPhone}
-            onChange={(e) => setField('driverPhone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setF({ ...f, driverPhone: digits });
+              if (phoneErr) setPhoneErr('');
+            }}
           />
-          {errText(errors.driverPhone)}
+          {phoneErr && <p className="text-xs font-medium text-[#EA2831] mt-1">⚠ {phoneErr}</p>}
         </Field>
       </div>
       <div className="mt-3"><PrimaryBtn onClick={submit}>Plan Shipment</PrimaryBtn></div>
@@ -697,7 +589,7 @@ const ExceptionsTab = () => {
   const [rows, setRows] = useState([]);
   useEffect(() => { getDiscrepancies().then((r) => setRows(listOf(r))).catch(apiError); }, []);
   return (
-    <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-x-auto">
+    <div className="border border-stone-200 rounded-2xl shadow-sm bg-white overflow-hidden">
       <table className="w-full text-left border-collapse min-w-[640px] resp-table">
         <thead><tr className="bg-stone-50 border-b border-stone-200"><Th>Shipment</Th><Th>Product</Th><Th>Expected</Th><Th>Received</Th><Th>Short</Th><Th>Status</Th></tr></thead>
         <tbody className="divide-y divide-stone-100">

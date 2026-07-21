@@ -662,7 +662,7 @@ const TransferModal = ({ lot, warehouses, onClose, onDone }) => {
   const dest = warehouses.filter((w) => String(w._id) !== srcId);
   // Dispatch now is ON by default — the sender creates AND dispatches in one
   // step and gets the manifest QR right here, never opening Operations.
-  const [f, setF] = useState({ toWarehouseId: dest[0]?._id || '', qty: lot.availableStock, vehicleNo: '', driverName: '', driverPhone: '', dispatchNow: true });
+  const [f, setF] = useState({ toWarehouseId: dest[0]?._id || '', qty: lot.availableStock, dispatchNow: true });
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null); // { qrPayload } once dispatched
   const submit = async () => {
@@ -679,11 +679,6 @@ const TransferModal = ({ lot, warehouses, onClose, onDone }) => {
         toWarehouseId: f.toWarehouseId,
         toLabel: destWh.name,
         lines: [{ inventoryId: lot._id, qty: Number(f.qty) }],
-        // Optional transport details captured on this transfer. Additive:
-        // the shipment model + create validator already accept these.
-        vehicleNo: f.vehicleNo.trim() || undefined,
-        driverName: f.driverName.trim() || undefined,
-        driverPhone: f.driverPhone.trim() || undefined,
       });
       const id = res?.data?._id || res?._id;
       if (f.dispatchNow && id) {
@@ -709,36 +704,16 @@ const TransferModal = ({ lot, warehouses, onClose, onDone }) => {
       <p className="text-sm text-stone-500 mb-4">
         {lot.productId?.productName} — {lot.availableStock} units at {lot.warehouseId?.name || 'Unassigned'}
       </p>
-      <Field label="Destination Warehouse" required>
+      <Field label="Destination Warehouse">
         <select className={inputCls} value={f.toWarehouseId} onChange={(e) => setF({ ...f, toWarehouseId: e.target.value })}>
           <option value="">Select warehouse…</option>
           {dest.map((w) => <option key={w._id} value={w._id}>{w.name}</option>)}
         </select>
       </Field>
-      <Field label="Quantity" required>
+      <Field label="Quantity">
         <input type="number" min="1" max={lot.availableStock} className={inputCls}
           value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} />
       </Field>
-      {/* Transport details for this transfer (all optional). */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3">
-        <Field label="Vehicle No." required>
-          <input className={inputCls} value={f.vehicleNo} onChange={(e) => setF({ ...f, vehicleNo: e.target.value })} />
-        </Field>
-        <Field label="Driver" required>
-          <input className={inputCls} value={f.driverName} onChange={(e) => setF({ ...f, driverName: e.target.value })} />
-        </Field>
-        <Field label="Driver phone" required>
-          <input
-            className={inputCls}
-            type="tel"
-            inputMode="numeric"
-            maxLength={10}
-            placeholder="10-digit number"
-            value={f.driverPhone}
-            onChange={(e) => setF({ ...f, driverPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-          />
-        </Field>
-      </div>
       <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
         <input type="checkbox" className="h-4 w-4 accent-[#EA2831]"
           checked={f.dispatchNow} onChange={(e) => setF({ ...f, dispatchNow: e.target.checked })} />
@@ -749,7 +724,7 @@ const TransferModal = ({ lot, warehouses, onClose, onDone }) => {
           ? <>This <b>dispatches</b> the transfer immediately: stock moves in-transit and the shipping label appears here to print/share. The destination warehouse <b>scans the label to receive</b> it.</>
           : <>This creates a planned transfer shipment. Dispatch it later from Operations → Shipment Tracking; the destination then <b>scans the label to receive</b> it into stock.</>}
       </div>
-      <PrimaryBtn disabled={!f.toWarehouseId || !f.qty || Number(f.qty) <= 0 || !f.vehicleNo.trim() || !f.driverName.trim() || !/^\d{10}$/.test(f.driverPhone.trim()) || busy} onClick={submit}>
+      <PrimaryBtn disabled={!f.toWarehouseId || !f.qty || busy} onClick={submit}>
         <span className="material-symbols-outlined text-base">local_shipping</span>
         {busy ? (f.dispatchNow ? 'Dispatching…' : 'Creating…') : (f.dispatchNow ? 'Dispatch Transfer' : 'Create Transfer Shipment')}
       </PrimaryBtn>
